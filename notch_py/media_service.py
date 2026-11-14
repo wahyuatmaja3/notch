@@ -117,7 +117,7 @@ class MediaService(QObject):
             elif "edge" in lower_app:
                 source = "Edge"
 
-            pixmap = None
+            thumb_bytes = None
             if props.thumbnail:
                 try:
                     stream_ref = await props.thumbnail.open_read_async()
@@ -127,8 +127,7 @@ class MediaService(QObject):
                         await reader.load_async(size)
                         byte_array = bytearray(size)
                         reader.read_bytes(byte_array)
-                        pixmap = QPixmap()
-                        pixmap.loadFromData(bytes(byte_array))
+                        thumb_bytes = bytes(byte_array)
                 except Exception as ex:
                     print(f"[MediaService] Error loading thumbnail: {ex}")
 
@@ -145,7 +144,8 @@ class MediaService(QObject):
                 "position_ms": pos_ms,
                 "is_playing": is_playing,
                 "source": source,
-                "pixmap": pixmap
+                "thumb_bytes": thumb_bytes,
+                "pixmap": None
             }
 
             self.track_changed.emit(self.current_track)
@@ -153,10 +153,11 @@ class MediaService(QObject):
             print(f"[MediaService] Error refreshing properties: {e}")
 
     def _refresh_timeline(self):
-        if not self._current_session:
+        session = self._current_session
+        if not session:
             return
         try:
-            timeline = self._current_session.get_timeline_properties()
+            timeline = session.get_timeline_properties()
             if timeline:
                 pos_ms = int(timeline.position.total_seconds() * 1000)
                 self.current_track["position_ms"] = pos_ms
@@ -165,10 +166,11 @@ class MediaService(QObject):
             pass
 
     def _refresh_playback(self):
-        if not self._current_session:
+        session = self._current_session
+        if not session:
             return
         try:
-            playback = self._current_session.get_playback_info()
+            playback = session.get_playback_info()
             if playback:
                 is_playing = playback.playback_status == wmc.GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
                 self.current_track["is_playing"] = is_playing
@@ -176,14 +178,63 @@ class MediaService(QObject):
         except Exception:
             pass
 
+    def _get_active_session(self):
+        if self._current_session:
+            return self._current_session
+        if self._session_manager:
+            try:
+                self._current_session = self._session_manager.get_current_session()
+                return self._current_session
+            except Exception:
+                pass
+        return None
+
+    async def _async_play_pause(self):
+        session = self._get_active_session()
+        if session:
+            try:
+                await session.try_toggle_play_pause_async()
+            except Exception as e:
+                print(f"[MediaService] Play/pause error: {e}")
+
+    async def _async_skip_next(self):
+        session = self._get_active_session()
+        if session:
+            try:
+                await session.try_skip_next_async()
+            except Exception as e:
+                print(f"[MediaService] Skip next error: {e}")
+
+    async def _async_skip_previous(self):
+        session = self._get_active_session()
+        if session:
+            try:
+                await session.try_skip_previous_async()
+            except Exception as e:
+                print(f"[MediaService] Skip previous error: {e}")
+
+    async def _async_seek(self, pos_ms: int):
+        session = self._get_active_session()
+        if session:
+            try:
+                import datetime
+                pos_time = datetime.timedelta(milliseconds=pos_ms)
+                await session.try_change_playback_position_async(pos_time)
+            except Exception as e:
+                print(f"[MediaService] Seek error: {e}")
+
     def play_pause(self):
-        if self._current_session and self._loop:
-            asyncio.run_coroutine_threadsafe(self._current_session.try_toggle_play_pause_async(), self._loop)
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._async_play_pause(), self._loop)
 
     def skip_next(self):
-        if self._current_session and self._loop:
-            asyncio.run_coroutine_threadsafe(self._current_session.try_skip_next_async(), self._loop)
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._async_skip_next(), self._loop)
 
     def skip_previous(self):
-        if self._current_session and self._loop:
-            asyncio.run_coroutine_threadsafe(self._current_session.try_skip_previous_async(), self._loop)
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._async_skip_previous(), self._loop)
+
+    def seek_to(self, pos_ms: int):
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._async_seek(pos_ms), self._loop)

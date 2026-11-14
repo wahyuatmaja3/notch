@@ -3,15 +3,21 @@ import sqlite3
 import urllib.parse
 import urllib.request
 import json
+import threading
 from pathlib import Path
+from PyQt6.QtCore import QObject, pyqtSignal
 from config import CACHE_DIR
 
 LRC_TIME_RE = re.compile(r"\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)")
 CLEAN_TITLE_RE = re.compile(r"\s*(\(|\[)(official|video|audio|lyrics|hd|4k|remastered|feat\.|ft\.).*?(\)|\])", re.IGNORECASE)
 
-class LyricsEngine:
+class LyricsEngine(QObject):
+    lyrics_loaded = pyqtSignal(str, str, list)
+
     def __init__(self):
+        super().__init__()
         self.db_path = CACHE_DIR / "lyrics.db"
+        self._db_lock = threading.Lock()
         self._init_db()
 
     def _init_db(self):
@@ -109,6 +115,31 @@ class LyricsEngine:
         except Exception:
             pass
 
+        return []
+
+    def fetch_lyrics_async(self, title: str, artist: str, duration_sec: int = 0):
+        """Asynchronous non-blocking fetch that checks cache instantly, then queries API in background thread."""
+        clean_t = self.clean_title(title)
+        clean_a = artist.replace(" - Topic", "").strip()
+
+        # Check local SQLite cache first (instant)
+        cached = self.get_cached(clean_t, clean_a)
+        if cached:
+            lines = self.parse_lrc(cached)
+            self.lyrics_loaded.emit(title, artist, lines)
+            return lines
+
+        # Fetch in background daemon thread
+        def _bg_worker():
+            try:
+                lines = self.fetch_lyrics(title, artist, duration_sec)
+                self.lyrics_loaded.emit(title, artist, lines)
+            except Exception as e:
+                print(f"[LyricsEngine] Async fetch error: {e}")
+                self.lyrics_loaded.emit(title, artist, [])
+
+        t = threading.Thread(target=_bg_worker, daemon=True)
+        t.start()
         return []
 
     def parse_lrc(self, lrc_text: str):

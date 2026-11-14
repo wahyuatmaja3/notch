@@ -21,7 +21,10 @@ from PyQt6.QtGui import (
 )
 from qframelesswindow import WindowEffect
 from qfluentwidgets import RoundMenu, Action
-from color_thief import extract_accent_color
+try:
+    from color_thief import extract_accent_color
+except ImportError:
+    from notch_py.color_thief import extract_accent_color
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -169,30 +172,47 @@ class NotchWindow(QWidget):
         self.media_service.track_changed.connect(self._on_track_changed)
         self.media_service.position_ticked.connect(self._on_position_ticked)
         self.media_service.playback_state_changed.connect(self._on_playback_state_changed)
+        self.lyrics_engine.lyrics_loaded.connect(self._on_lyrics_loaded)
 
     # ─────────────────── Media Callbacks ─────────────────────────────────────
+
+    def _on_lyrics_loaded(self, title: str, artist: str, lines: list):
+        if title == self._title:
+            self._lyrics = lines
+            self._lyric_idx = -1
+            self._update_lyric(self._pos_ms)
+            self.update()
 
     def _on_track_changed(self, track: dict):
         self._title   = track.get("title", "No Track")
         self._artist  = track.get("artist", "")
         self._dur_ms  = track.get("duration_ms", 0)
         self._source  = track.get("source", "Spotify")
-        pixmap        = track.get("pixmap")
-
-        self._pixmap = pixmap if (pixmap and not pixmap.isNull()) else None
+        
+        # Load thumbnail safely on GUI thread
+        thumb_bytes = track.get("thumb_bytes")
+        if thumb_bytes:
+            pixmap = QPixmap()
+            pixmap.loadFromData(thumb_bytes)
+            self._pixmap = pixmap if not pixmap.isNull() else None
+        elif track.get("pixmap") and not track.get("pixmap").isNull():
+            self._pixmap = track.get("pixmap")
+        else:
+            self._pixmap = None
 
         if self.config.get("auto_accent", True):
-            self._accent = extract_accent_color(pixmap, self.config.get("custom_accent", "#1DB954"))
+            self._accent = extract_accent_color(self._pixmap, self.config.get("custom_accent", "#1DB954"))
         else:
             self._accent = QColor(self.config.get("custom_accent", "#1DB954"))
 
         total_sec = self._dur_ms // 1000
         if self._title and self._title != "No Track Playing":
-            self._lyrics          = self.lyrics_engine.fetch_lyrics(self._title, self._artist, total_sec)
             self._lyric_idx       = -1
             self._lyric_text      = ""
             self._lyric_prev_text = ""
             self._lyric_next_text = ""
+            # Non-blocking async fetch
+            self._lyrics = self.lyrics_engine.fetch_lyrics_async(self._title, self._artist, total_sec)
         else:
             self._lyrics = []
 
@@ -836,13 +856,22 @@ class NotchWindow(QWidget):
                 self.update()
                 return
             elif target == "play":
-                self.media_service.play_pause()
+                try:
+                    self.media_service.play_pause()
+                except Exception as e:
+                    print(f"[NotchWindow] Play/pause call failed: {e}")
                 return
             elif target == "next":
-                self.media_service.skip_next()
+                try:
+                    self.media_service.skip_next()
+                except Exception as e:
+                    print(f"[NotchWindow] Skip next call failed: {e}")
                 return
             elif target == "prev":
-                self.media_service.skip_previous()
+                try:
+                    self.media_service.skip_previous()
+                except Exception as e:
+                    print(f"[NotchWindow] Skip previous call failed: {e}")
                 return
             elif target == "slider":
                 pad_x = 24.0
@@ -850,6 +879,10 @@ class NotchWindow(QWidget):
                 slider_w = float(self.width()) - (pad_x * 2) - 104
                 click_ratio = max(0.0, min(1.0, (pos.x() - slider_x) / slider_w))
                 self._pos_ms = int(click_ratio * self._dur_ms)
+                try:
+                    self.media_service.seek_to(self._pos_ms)
+                except Exception as e:
+                    print(f"[NotchWindow] Seek call failed: {e}")
                 self.update()
                 return
 
