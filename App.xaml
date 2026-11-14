@@ -1,0 +1,12 @@
+﻿<Application x:Class="Notch.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Notch"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="DynamicAccentColor">#1ED760</Color>
+            <SolidColorBrush x:Key="DynamicAccentBrush" Color="#1ED760" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,466 @@
+<Window x:Class="Notch.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        mc:Ignorable="d"
+        Title="Notch Settings"
+        Height="540"
+        Width="580"
+        WindowStartupLocation="CenterScreen"
+        Background="#18181E"
+        Foreground="#EEEEEE"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#CCCCCC" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="SubheaderTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#888899" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style x:Key="CardBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="#22222B" />
+            <Setter Property="BorderBrush" Value="#30303D" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+
+        <!-- Custom TabItem Style -->
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#888899" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="tabBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="0,0,0,2"
+                                BorderBrush="Transparent"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="tabBorder" Property="BorderBrush" Value="#3B82F6" />
+                                <Setter Property="Foreground" Value="#FFFFFF" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#E0E0E0" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20,16,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />  <!-- Title -->
+            <RowDefinition Height="*" />     <!-- Tabs -->
+            <RowDefinition Height="Auto" />  <!-- Footer Buttons -->
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="Notch Settings"
+                       FontSize="20"
+                       FontWeight="Bold"
+                       Foreground="#FFFFFF" />
+            <TextBlock Text="Customize your Windows Dynamic Island overlay"
+                       Style="{StaticResource SubheaderTextStyle}"
+                       Margin="0,2,0,0" />
+        </StackPanel>
+
+        <!-- Tabs -->
+        <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+            <!-- TAB 1: APPEARANCE -->
+            <TabItem Header="Appearance">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                    <StackPanel>
+                        <!-- Theme Card -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Theme" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Liquid Glass dark / light aesthetic" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <ComboBox x:Name="ThemeCombo" Grid.Column="1" Width="120" SelectedIndex="0">
+                                    <ComboBoxItem Content="Dark" />
+                                    <ComboBoxItem Content="Light" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- Opacity Slider -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Glass Opacity" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Transparency level of the notch" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="OpacitySlider" Grid.Column="1" Minimum="0.60" Maximum="1.0" Value="0.92" SmallChange="0.05" LargeChange="0.1" ValueChanged="OpacitySlider_ValueChanged" />
+                                <TextBlock x:Name="OpacityValText" Grid.Column="2" Text="92%" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Corner Radius -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Corner Radius" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Rounded pill curvature" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="CornerRadiusSlider" Grid.Column="1" Minimum="16" Maximum="32" Value="28" ValueChanged="CornerRadiusSlider_ValueChanged" />
+                                <TextBlock x:Name="CornerRadiusValText" Grid.Column="2" Text="28px" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Auto Accent Color -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Adaptive Glass Accent Color" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Dynamically sample vibrant glow from album art" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <CheckBox x:Name="AutoAccentCheck" Grid.Column="1" IsChecked="True" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Visibility Options -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="Display Components" Style="{StaticResource HeaderTextStyle}" Margin="0,0,0,8" />
+                                <CheckBox x:Name="ShowAlbumArtCheck" Content="Show Album Art Thumbnail" IsChecked="True" Margin="0,0,0,6" />
+                                <CheckBox x:Name="ShowProgressBarCheck" Content="Show Track Progress Bar" IsChecked="True" Margin="0,0,0,6" />
+                                <CheckBox x:Name="ShowLyricsCheck" Content="Show Live Synced Lyrics" IsChecked="True" Margin="0,0,0,6" />
+                                <CheckBox x:Name="ShowControlsCheck" Content="Show Playback Control Buttons" IsChecked="True" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 2: POSITION & SIZE -->
+            <TabItem Header="Position &amp; Size">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                    <StackPanel>
+                        <!-- Horizontal Alignment -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Screen Alignment" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Default position on primary screen" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <ComboBox x:Name="AlignmentCombo" Grid.Column="1" Width="120" SelectedIndex="0">
+                                    <ComboBoxItem Content="Center" />
+                                    <ComboBoxItem Content="Left" />
+                                    <ComboBoxItem Content="Right" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- Vertical Offset -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Top Offset" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Distance from top edge of monitor" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="VerticalOffsetSlider" Grid.Column="1" Minimum="0" Maximum="60" Value="12" ValueChanged="VerticalOffsetSlider_ValueChanged" />
+                                <TextBlock x:Name="VerticalOffsetValText" Grid.Column="2" Text="12px" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Expanded Width -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Expanded Width" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Width when expanded with lyrics" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="ExpandedWidthSlider" Grid.Column="1" Minimum="380" Maximum="520" Value="440" ValueChanged="ExpandedWidthSlider_ValueChanged" />
+                                <TextBlock x:Name="ExpandedWidthValText" Grid.Column="2" Text="440px" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="Tip: You can also drag and move the Notch anywhere with your mouse!"
+                                   Style="{StaticResource SubheaderTextStyle}"
+                                   Margin="4,8,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 3: BEHAVIOR -->
+            <TabItem Header="Behavior">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                    <StackPanel>
+                        <!-- Auto-Expand On New Song -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Auto-Expand on Track Change" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Automatically expand notch briefly when a new song plays" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <CheckBox x:Name="AutoExpandCheck" Grid.Column="1" IsChecked="True" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Collapse Delay -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Auto-Collapse Delay" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Time before notch collapses after mouse leave" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="CollapseDelaySlider" Grid.Column="1" Minimum="2" Maximum="10" Value="5" ValueChanged="CollapseDelaySlider_ValueChanged" />
+                                <TextBlock x:Name="CollapseDelayValText" Grid.Column="2" Text="5s" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Start with Windows -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Start with Windows" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Launch Notch automatically on Windows startup" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <CheckBox x:Name="StartWithWindowsCheck" Grid.Column="1" IsChecked="False" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Minimize to Tray -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="System Tray Operation" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Keep Notch running in background tray icon" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <CheckBox x:Name="MinimizeToTrayCheck" Grid.Column="1" IsChecked="True" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 4: LYRICS -->
+            <TabItem Header="Lyrics">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                    <StackPanel>
+                        <!-- Font Size -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="40" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Lyrics Font Size" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Text size of the highlighted active line" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="LyricsFontSizeSlider" Grid.Column="1" Minimum="11" Maximum="18" Value="14" ValueChanged="LyricsFontSizeSlider_ValueChanged" />
+                                <TextBlock x:Name="LyricsFontSizeValText" Grid.Column="2" Text="14px" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Visible Lines -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Visible Lines" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Display previous, active, and upcoming lines" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <ComboBox x:Name="VisibleLinesCombo" Grid.Column="1" Width="120" SelectedIndex="1">
+                                    <ComboBoxItem Content="1 Line (Active only)" />
+                                    <ComboBoxItem Content="3 Lines (Prev + Next)" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- Sync Time Offset -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="50" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Sync Offset Calibration" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Advance or delay lyrics timing (±ms)" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Slider x:Name="SyncOffsetSlider" Grid.Column="1" Minimum="-2000" Maximum="2000" Value="0" SmallChange="100" LargeChange="500" ValueChanged="SyncOffsetSlider_ValueChanged" />
+                                <TextBlock x:Name="SyncOffsetValText" Grid.Column="2" Text="0 ms" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Clear Cache Button -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Local Lyrics Cache" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Stored in SQLite database for instant retrieval" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <Button x:Name="ClearCacheBtn" Grid.Column="1" Content="Clear Cache" Padding="12,6" Click="ClearCacheBtn_Click" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 5: SOURCES -->
+            <TabItem Header="Sources &amp; Extension">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                    <StackPanel>
+                        <!-- SMTC Integration -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Windows Media Session (SMTC)" Style="{StaticResource HeaderTextStyle}" />
+                                    <TextBlock Text="Built-in native detection for Chrome, Brave, Firefox, Spotify" Style="{StaticResource SubheaderTextStyle}" />
+                                </StackPanel>
+                                <CheckBox x:Name="EnableSmtcCheck" Grid.Column="1" IsChecked="True" />
+                            </Grid>
+                        </Border>
+
+                        <!-- WebSocket Extension Bridge -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="WebSocket Extension Bridge" Style="{StaticResource HeaderTextStyle}" />
+                                        <TextBlock Text="Local WebSocket port for Notch Bridge browser extension" Style="{StaticResource SubheaderTextStyle}" />
+                                    </StackPanel>
+                                    <TextBox x:Name="WsPortBox" Grid.Column="1" Width="80" Text="7891" />
+                                </Grid>
+                                <TextBlock Text="Status: Active on ws://127.0.0.1:7891"
+                                           Foreground="#34D399"
+                                           FontSize="11"
+                                           Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Extension Installation Guide -->
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="How to install Browser Extension (Optional)" Style="{StaticResource HeaderTextStyle}" Margin="0,0,0,4" />
+                                <TextBlock Text="1. Open Chrome/Brave and go to: chrome://extensions" Style="{StaticResource SubheaderTextStyle}" Margin="0,2" />
+                                <TextBlock Text="2. Turn on 'Developer mode' in top-right corner." Style="{StaticResource SubheaderTextStyle}" Margin="0,2" />
+                                <TextBlock Text="3. Click 'Load unpacked' and select the 'browser-extension' folder inside Notch." Style="{StaticResource SubheaderTextStyle}" Margin="0,2" />
+                                <TextBlock Text="4. For Firefox: go to about:debugging → This Firefox → Load Temporary Add-on." Style="{StaticResource SubheaderTextStyle}" Margin="0,2" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer Buttons -->
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Button x:Name="ResetDefaultsBtn"
+                    Content="Reset Defaults"
+                    HorizontalAlignment="Left"
+                    Padding="14,6"
+                    Click="ResetDefaultsBtn_Click" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="SaveBtn"
+                        Content="Save &amp; Apply"
+                        Background="#3B82F6"
+                        Foreground="#FFFFFF"
+                        FontWeight="SemiBold"
+                        Padding="18,6"
+                        Margin="0,0,8,0"
+                        Click="SaveBtn_Click" />
+                <Button x:Name="CloseBtn"
+                        Content="Close"
+                        Padding="14,6"
+                        Click="CloseBtn_Click" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
