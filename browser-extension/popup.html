@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 250px;
+      margin: 0;
+      padding: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #18181E;
+      color: #E0E0E0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: bold;
+      color: #FFFFFF;
+    }
+    .status-card {
+      background: #22222B;
+      border: 1px solid #30303D;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #999;
+    }
+    .dot.connected {
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+    }
+    .info {
+      font-size: 11px;
+      color: #888899;
+      margin-top: 6px;
+    }
+    .supported {
+      font-size: 11px;
+      color: #A0A0B0;
+      border-top: 1px solid #2B2B38;
+      padding-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size: 18px;">🎵</span>
+    <span class="title">Notch Bridge</span>
+  </div>
+
+  <div class="status-card">
+    <div class="status-indicator">
+      <div id="dot" class="dot"></div>
+      <span id="status-text">Connecting...</span>
+    </div>
+    <div id="track-info" class="info">Open YouTube Music or Spotify to begin syncing.</div>
+  </div>
+
+  <div class="supported">
+    Supports YouTube Music &amp; Spotify Web on Chrome, Brave, and Firefox.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

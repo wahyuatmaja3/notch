@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Notch Bridge",
+  "version": "1.0.0",
+  "description": "Bridges YouTube Music & Spotify Web with Notch Dynamic Island for Windows",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://music.youtube.com/*",
+    "https://open.spotify.com/*"
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "js": ["content-ytmusic.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://open.spotify.com/*"],
+      "js": ["content-spotify.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Notch Bridge",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}
