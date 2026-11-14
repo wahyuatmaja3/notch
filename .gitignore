@@ -1,0 +1,30 @@
+# Build outputs (.NET)
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Dist and executables (exceeds GitHub 100MB limit)
+dist/
+dist_py/
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.onefile-build/
+*.build/
+*.dist/
+
+# IDE & OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Antigravity agent temp
+.gemini/
