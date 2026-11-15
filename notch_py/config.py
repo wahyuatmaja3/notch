@@ -8,29 +8,55 @@ CACHE_DIR = APPDATA_DIR / "cache"
 
 DEFAULT_SETTINGS = {
     "theme": "Dark",
-    "opacity": 0.68,
-    "corner_radius": 22,
+    "theme_style": "liquid_glass",        # "liquid_glass" or "obsidian"
+    "layout_mode": "floating",            # "anchored" (top bezel flush) or "floating" (capsule)
+    "floating_offset_y": 14,              # Distance from top edge in floating mode
+    "opacity": 0.72,                      # Glass background opacity (0.3 - 0.95)
+    "corner_radius": 24,
     "auto_accent": True,
     "custom_accent": "#1ED760",
+    "active_module": "media",             # "media", "pomodoro", "tasks", "notifications", "hydration", "control_center"
+    "enabled_modules": ["media", "pomodoro", "notifications", "tasks", "hydration", "control_center"],
+    "split_pill_enabled": True,           # Show dual pill when 2 activities are active
+    "privacy_indicators": True,           # Show mic/camera privacy dots
+    
+    # Media Player
     "show_album_art": True,
     "show_progress_bar": True,
     "show_lyrics": True,
     "show_controls": True,
-    "horizontal_alignment": "Center",
-    "horizontal_offset": 0,
-    "vertical_offset": 0,
-    "collapsed_mode": "compact",
+    "collapsed_mode": "compact",          # "minimal", "compact", "lyrics"
     "collapsed_width": 320,
     "collapsed_height": 38,
     "expanded_width": 460,
     "expanded_height": 185,
     "auto_expand_on_new_song": True,
     "collapse_delay": 5.0,
-    "start_with_windows": False,
     "lyrics_font_size": 13,
     "visible_lyric_lines": 3,
     "sync_offset_ms": 0,
-    "acrylic_blur": True
+
+    # Pomodoro Timer
+    "pomodoro_focus_min": 25,
+    "pomodoro_break_min": 5,
+    "pomodoro_auto_switch": True,
+    "pomodoro_sound_alert": True,
+
+    # Hydration
+    "hydration_target_l": 2.0,
+    "hydration_interval_min": 45,
+
+    # Notifications
+    "auto_expand_notifications": True,
+    "notification_alert_sec": 4.0,
+    "notification_filter": ["whatsapp", "telegram", "discord", "spotify", "chrome", "firefox", "slack"],
+
+    # General Placement
+    "horizontal_alignment": "Center",
+    "horizontal_offset": 0,
+    "vertical_offset": 0,
+    "start_with_windows": False,
+    "acrylic_blur": False                  # Pure translucent composition is cleaner than legacy Vista DWM blur
 }
 
 class Config:
