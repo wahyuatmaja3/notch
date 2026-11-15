@@ -47,6 +47,7 @@ def main():
 
     # Start WinSDK media session listener in background thread
     QTimer.singleShot(200, media_service.start)
+    QTimer.singleShot(400, notch_window.notification_service.start)
 
     sys.exit(app.exec())
 
