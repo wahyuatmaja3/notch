@@ -79,6 +79,15 @@ class TrayManager:
 
         self.menu.addSeparator()
 
+        # Modules Submenu / Quick Selector
+        self.menu.addAction(Action("🎵 Switch to Media Player", triggered=lambda: self.notch_window.set_active_module("media")))
+        self.menu.addAction(Action("⏱️ Switch to Pomodoro Timer", triggered=lambda: self.notch_window.set_active_module("pomodoro")))
+        self.menu.addAction(Action("📋 Switch to Tasks & Reminders", triggered=lambda: self.notch_window.set_active_module("tasks")))
+        self.menu.addAction(Action("💧 Switch to Hydration Tracker", triggered=lambda: self.notch_window.set_active_module("hydration")))
+        self.menu.addAction(Action("🎛️ Switch to Control Center", triggered=lambda: self.notch_window.set_active_module("control_center")))
+
+        self.menu.addSeparator()
+
         toggle_action = Action("👁 Toggle Notch Overlay")
         toggle_action.triggered.connect(self._toggle_notch)
         self.menu.addAction(toggle_action)
