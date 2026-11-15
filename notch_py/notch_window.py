@@ -40,10 +40,10 @@ except ImportError:
 # Layout Constants
 # ─────────────────────────────────────────────────────────────────────────────
 EXPANDED_W          = 460
-EXPANDED_H          = 192
+EXPANDED_H          = 226
 EXPANDED_R          = 26.0
 
-COLLAPSED_MIN_W     = 200
+COLLAPSED_MIN_W     = 170
 COLLAPSED_COMPACT_W = 320
 COLLAPSED_LYRIC_W   = 430
 COLLAPSED_H         = 38
@@ -272,7 +272,7 @@ class NotchWindow(QWidget):
         )
 
     def _on_lyrics_loaded(self, title: str, artist: str, lines: list):
-        if title == self._title:
+        if title == self._title or not self._lyrics:
             self._lyrics = lines
             self._lyric_idx = -1
             self._update_lyric(self._pos_ms)
@@ -300,14 +300,17 @@ class NotchWindow(QWidget):
             self._accent = QColor(self.config.get("custom_accent", "#1ED760"))
 
         total_sec = self._dur_ms // 1000
-        if self._title and self._title != "No Track Playing":
+        if self._title and self._title != "No Track" and self._title != "No Track Playing":
             self._lyric_idx       = -1
-            self._lyric_text      = ""
+            self._lyric_text      = "Mencari lirik..."
             self._lyric_prev_text = ""
             self._lyric_next_text = ""
             self._lyrics = self.lyrics_engine.fetch_lyrics_async(self._title, self._artist, total_sec)
+            if self._lyrics:
+                self._update_lyric(self._pos_ms)
         else:
             self._lyrics = []
+            self._lyric_text = ""
 
         if self.config.get("auto_expand_on_new_song", True) and self._title != "No Track Playing":
             if self._active_module == "media":
@@ -347,15 +350,24 @@ class NotchWindow(QWidget):
 
     def _update_lyric(self, pos_ms: int):
         if not self._lyrics:
+            if self._title and self._title != "No Track" and self._title != "No Track Playing":
+                self._lyric_text = "Mencari lirik..."
+            else:
+                self._lyric_text = ""
             return
         idx = self.lyrics_engine.get_active_index(
             self._lyrics, pos_ms, self.config.get("sync_offset_ms", 0)
         )
-        if idx != self._lyric_idx and 0 <= idx < len(self._lyrics):
-            self._lyric_idx       = idx
-            self._lyric_text      = self._lyrics[idx]["text"]
-            self._lyric_prev_text = self._lyrics[idx - 1]["text"] if idx > 0 else ""
-            self._lyric_next_text = self._lyrics[idx + 1]["text"] if idx + 1 < len(self._lyrics) else ""
+        if idx != self._lyric_idx:
+            self._lyric_idx = idx
+            if 0 <= idx < len(self._lyrics):
+                self._lyric_text      = self._lyrics[idx]["text"] or "♪ Instrumental ♪"
+                self._lyric_prev_text = self._lyrics[idx - 1]["text"] if idx > 0 else ""
+                self._lyric_next_text = self._lyrics[idx + 1]["text"] if idx + 1 < len(self._lyrics) else ""
+            else:
+                self._lyric_text      = "♪ Intro ♪"
+                self._lyric_prev_text = ""
+                self._lyric_next_text = self._lyrics[0]["text"] if self._lyrics else ""
             self._lyric_opacity   = 0.0
             self._lyric_anim_step = 0
             self.lyric_fade_timer.start()
@@ -720,12 +732,12 @@ class NotchWindow(QWidget):
     # ─────────────────── Paint: Expanded Media (Image 1 Replica) ─────────────
 
     def _paint_expanded_media(self, p: QPainter, bw: float, bh: float):
-        # 1. Album Art Squircle (52x52, r=12)
-        art_sz = 52.0
-        art_x = 22.0
-        art_y = 16.0
+        # 1. Album Art Squircle (42x42, r=10)
+        art_sz = 42.0
+        art_x = 20.0
+        art_y = 12.0
         art_path = QPainterPath()
-        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 10, 10)
 
         if self._pixmap:
             p.save()
@@ -744,7 +756,7 @@ class NotchWindow(QWidget):
             art_grad.setColorAt(1.0, QColor(max(0, ac.red() - 40), max(0, ac.green() - 40), max(0, ac.blue() - 40), 230))
             p.fillPath(art_path, QBrush(art_grad))
             p.setPen(QColor(255, 255, 255, 230))
-            p.setFont(QFont("Segoe UI Emoji", 18))
+            p.setFont(QFont("Segoe UI Emoji", 16))
             p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "♫")
 
         p.setPen(QPen(QColor(255, 255, 255, 35), 1.0))
@@ -752,58 +764,114 @@ class NotchWindow(QWidget):
         p.drawPath(art_path)
 
         # 2. Title & Artist
-        avail_t = bw - 88 - 140
+        avail_t = bw - 72 - 120
         p.setPen(QColor(255, 255, 255, 245))
-        title_font = QFont("Segoe UI", 12, QFont.Weight.Bold)
+        title_font = QFont("Segoe UI", 11, QFont.Weight.Bold)
         p.setFont(title_font)
         tfm = QFontMetrics(title_font)
         t_elided = tfm.elidedText(self._title, Qt.TextElideMode.ElideRight, int(avail_t))
-        p.drawText(QRectF(88, 17, avail_t, 22), Qt.AlignmentFlag.AlignVCenter, t_elided)
+        p.drawText(QRectF(70, 13, avail_t, 20), Qt.AlignmentFlag.AlignVCenter, t_elided)
 
         p.setPen(QColor(180, 180, 195, 190))
-        artist_font = QFont("Segoe UI", 10)
+        artist_font = QFont("Segoe UI", 9)
         p.setFont(artist_font)
         afm = QFontMetrics(artist_font)
         a_elided = afm.elidedText(self._artist, Qt.TextElideMode.ElideRight, int(avail_t))
-        p.drawText(QRectF(88, 41, avail_t, 18), Qt.AlignmentFlag.AlignVCenter, a_elided)
+        p.drawText(QRectF(70, 33, avail_t, 16), Qt.AlignmentFlag.AlignVCenter, a_elided)
 
-        # 3. Top-Right Icons: [🎤 Mic] [Equalizer] [Source Badge]
+        # 3. Top-Right Badges & Equalizer
         right_x = bw - 20
-        spot_x = right_x - 28
+        spot_x = right_x - 30
         p.setPen(Qt.PenStyle.NoPen)
         spot_color = QColor("#1DB954") if "spotify" in self._source.lower() else self._accent
         p.setBrush(spot_color)
-        p.drawEllipse(QPointF(spot_x, 26), 8, 8)
+        p.drawEllipse(QPointF(spot_x, 24), 7, 7)
 
-        eq_x = spot_x - 24
-        self._draw_equalizer_bars(p, eq_x - 20, 26, 20.0, 16.0)
+        eq_x = spot_x - 20
+        self._draw_equalizer_bars(p, eq_x - 20, 24, 18.0, 14.0)
 
-        # Microphone Icon (Toggle Lyrics view)
-        mic_x = eq_x - 30
-        mic_active = (self._expanded_page == "lyrics")
-        mic_color = self._accent if mic_active else QColor(255, 255, 255, 200)
-        p.setPen(QPen(mic_color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(QRectF(mic_x - 3, 20, 6, 9), 3, 3)
-        p.drawArc(QRectF(mic_x - 5, 22, 10, 8), 190 * 16, 160 * 16)
-        p.drawLine(QPointF(mic_x, 30), QPointF(mic_x, 33))
+        # 4. Mode Selector Chips: [ 🖼️ Foto Saja ] [ 🎵 + Judul ] [ 📝 + Lirik ]
+        self._draw_mode_selector_chips(p, bw, 56.0)
 
-        # 4. Middle Row: Slider or Synced Lyrics
-        if self._expanded_page == "lyrics":
-            self._draw_expanded_lyrics_view(p, bw, 86)
-        else:
-            self._draw_expanded_slider_view(p, bw, 86)
+        # 5. Live Synced Lyrics Banner
+        self._draw_expanded_lyrics_banner(p, bw, 86.0)
 
-        # 5. Bottom Row: 3 Circular Glass Controls
-        self._draw_expanded_controls(p, bw, 138)
+        # 6. Scrubber Progress Slider
+        self._draw_expanded_slider_view(p, bw, 132.0)
+
+        # 7. Media Playback Controls
+        self._draw_expanded_controls(p, bw, 168.0)
+
+    def _draw_mode_selector_chips(self, p: QPainter, bw: float, top_y: float):
+        """Draws 3 mode selector pills for collapsed display mode: Minimal, Compact, Lyrics."""
+        chip_w = 92.0
+        chip_h = 22.0
+        gap = 6.0
+        total_w = (chip_w * 3) + (gap * 2)
+        start_x = (bw - total_w) / 2.0
+
+        modes = [
+            ("minimal", "🖼️ Foto Saja"),
+            ("compact", "🎵 + Judul"),
+            ("lyrics",  "📝 + Lirik")
+        ]
+
+        for i, (mode_key, label) in enumerate(modes):
+            x = start_x + (i * (chip_w + gap))
+            chip_rect = QRectF(x, top_y, chip_w, chip_h)
+            is_active = (self._collapsed_mode == mode_key)
+
+            if is_active:
+                ac = self._accent
+                p.setBrush(QColor(ac.red(), ac.green(), ac.blue(), 215))
+                p.setPen(QPen(QColor(255, 255, 255, 140), 1.0))
+            else:
+                p.setBrush(QColor(255, 255, 255, 18))
+                p.setPen(QPen(QColor(255, 255, 255, 30), 0.8))
+
+            p.drawRoundedRect(chip_rect, 11, 11)
+
+            p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold if is_active else QFont.Weight.Medium))
+            p.setPen(QColor(255, 255, 255, 255 if is_active else 180))
+            p.drawText(chip_rect, Qt.AlignmentFlag.AlignCenter, label)
+
+    def _draw_expanded_lyrics_banner(self, p: QPainter, bw: float, top_y: float):
+        """Draws prominent live synchronized lyrics banner in the maximized card."""
+        pill_rect = QRectF(22, top_y, bw - 44, 32)
+        p.setPen(QPen(QColor(255, 255, 255, 28), 1.0))
+        p.setBrush(QColor(0, 0, 0, 80))
+        p.drawRoundedRect(pill_rect, 16, 16)
+
+        # Micro icon on left of pill
+        p.setFont(QFont("Segoe UI Emoji", 9))
+        p.setPen(QColor(self._accent.red(), self._accent.green(), self._accent.blue(), 230))
+        p.drawText(QRectF(32, top_y, 20, 32), Qt.AlignmentFlag.AlignVCenter, "♫")
+
+        active_txt = self._lyric_text
+        if not active_txt:
+            if self._lyrics:
+                active_txt = "♪ Instrumental ♪"
+            elif self._title and self._title != "No Track" and self._title != "No Track Playing":
+                active_txt = "Mencari lirik..."
+            else:
+                active_txt = "♪ Tidak ada media ♪"
+
+        p.save()
+        p.setOpacity(max(0.4, self._lyric_opacity))
+        p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 245))
+        fm = QFontMetrics(p.font())
+        elided = fm.elidedText(active_txt, Qt.TextElideMode.ElideRight, int(bw - 88))
+        p.drawText(QRectF(52, top_y, bw - 84, 32), Qt.AlignmentFlag.AlignVCenter, elided)
+        p.restore()
 
     def _draw_expanded_slider_view(self, p: QPainter, bw: float, bar_y: float):
         pad_x = 22.0
         # Chevrons < and > on sides
         p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 160))
-        p.drawText(QRectF(pad_x - 6, bar_y - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, "‹")
-        p.drawText(QRectF(bw - pad_x - 10, bar_y - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, "›")
+        p.drawText(QRectF(pad_x - 8, bar_y - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, "‹")
+        p.drawText(QRectF(bw - pad_x - 8, bar_y - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, "›")
 
         p.setPen(QColor(160, 160, 175, 170))
         p.setFont(QFont("Segoe UI", 9))
@@ -811,11 +879,11 @@ class NotchWindow(QWidget):
         dur_s = self._dur_ms // 1000
         time_left = max(0, dur_s - pos_s)
 
-        p.drawText(QRectF(pad_x + 14, bar_y - 8, 38, 16), Qt.AlignmentFlag.AlignLeft, f"{pos_s // 60}:{pos_s % 60:02d}")
-        p.drawText(QRectF(bw - pad_x - 52, bar_y - 8, 38, 16), Qt.AlignmentFlag.AlignRight, f"-{time_left // 60}:{time_left % 60:02d}")
+        p.drawText(QRectF(pad_x + 12, bar_y - 8, 36, 16), Qt.AlignmentFlag.AlignLeft, f"{pos_s // 60}:{pos_s % 60:02d}")
+        p.drawText(QRectF(bw - pad_x - 48, bar_y - 8, 36, 16), Qt.AlignmentFlag.AlignRight, f"-{time_left // 60}:{time_left % 60:02d}")
 
-        slider_x = pad_x + 56
-        slider_w = bw - (pad_x * 2) - 112
+        slider_x = pad_x + 52
+        slider_w = bw - (pad_x * 2) - 104
         track_h = 3.5
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 40))
@@ -829,33 +897,6 @@ class NotchWindow(QWidget):
         # Scrubber Knob
         p.setBrush(QColor(255, 255, 255, 255))
         p.drawEllipse(QPointF(slider_x + fill_w, bar_y), 4.5, 4.5)
-
-    def _draw_expanded_lyrics_view(self, p: QPainter, bw: float, top_y: float):
-        pad = 26.0
-        w = bw - (pad * 2)
-
-        if self._lyric_prev_text:
-            p.setFont(QFont("Segoe UI", 8))
-            p.setPen(QColor(180, 180, 200, 90))
-            p.drawText(QRectF(pad, top_y - 14, w, 12), Qt.AlignmentFlag.AlignCenter, self._lyric_prev_text)
-
-        active_txt = self._lyric_text if self._lyric_text else "♪ Instrumental ♪"
-        pill_rect = QRectF(pad + 10, top_y + 2, w - 20, 22)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(0, 0, 0, 75))
-        p.drawRoundedRect(pill_rect, 11, 11)
-
-        p.save()
-        p.setOpacity(self._lyric_opacity)
-        p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        p.setPen(QColor(255, 255, 255, 250))
-        p.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, active_txt)
-        p.restore()
-
-        if self._lyric_next_text:
-            p.setFont(QFont("Segoe UI", 8))
-            p.setPen(QColor(180, 180, 200, 90))
-            p.drawText(QRectF(pad, top_y + 28, w, 12), Qt.AlignmentFlag.AlignCenter, self._lyric_next_text)
 
     def _draw_expanded_controls(self, p: QPainter, bw: float, btn_y: float):
         cx = bw / 2
@@ -874,41 +915,41 @@ class NotchWindow(QWidget):
             p.drawEllipse(QPointF(bx, by), br, br)
 
         # Center Play/Pause button
-        draw_glass_btn(cx, btn_y, 20, is_center=True)
+        draw_glass_btn(cx, btn_y, 18, is_center=True)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 255))
         if self._is_playing:
-            p.drawRoundedRect(QRectF(cx - 5.5, btn_y - 7, 3.5, 14), 1.5, 1.5)
-            p.drawRoundedRect(QRectF(cx + 2.0, btn_y - 7, 3.5, 14), 1.5, 1.5)
+            p.drawRoundedRect(QRectF(cx - 5.0, btn_y - 6, 3.2, 12), 1.5, 1.5)
+            p.drawRoundedRect(QRectF(cx + 1.8, btn_y - 6, 3.2, 12), 1.5, 1.5)
         else:
             tri = QPainterPath()
-            tri.moveTo(cx - 4.0, btn_y - 7.5)
-            tri.lineTo(cx + 6.5, btn_y)
-            tri.lineTo(cx - 4.0, btn_y + 7.5)
+            tri.moveTo(cx - 3.5, btn_y - 6.5)
+            tri.lineTo(cx + 6.0, btn_y)
+            tri.lineTo(cx - 3.5, btn_y + 6.5)
             tri.closeSubpath()
             p.fillPath(tri, QColor(255, 255, 255, 255))
 
         # Prev button
-        prev_x = cx - 54
-        draw_glass_btn(prev_x, btn_y, 17)
+        prev_x = cx - 52
+        draw_glass_btn(prev_x, btn_y, 15)
         p.setBrush(QColor(255, 255, 255, 240))
-        p.drawRoundedRect(QRectF(prev_x - 7.0, btn_y - 5.5, 2.0, 11), 1, 1)
+        p.drawRoundedRect(QRectF(prev_x - 6.0, btn_y - 5.0, 2.0, 10), 1, 1)
         t1 = QPainterPath()
-        t1.moveTo(prev_x + 5.5, btn_y - 5.5)
+        t1.moveTo(prev_x + 5.0, btn_y - 5.0)
         t1.lineTo(prev_x, btn_y)
-        t1.lineTo(prev_x + 5.5, btn_y + 5.5)
+        t1.lineTo(prev_x + 5.0, btn_y + 5.0)
         t1.closeSubpath()
         p.fillPath(t1, QColor(255, 255, 255, 240))
 
         # Next button
-        next_x = cx + 54
-        draw_glass_btn(next_x, btn_y, 17)
+        next_x = cx + 52
+        draw_glass_btn(next_x, btn_y, 15)
         p.setBrush(QColor(255, 255, 255, 240))
-        p.drawRoundedRect(QRectF(next_x + 5.0, btn_y - 5.5, 2.0, 11), 1, 1)
+        p.drawRoundedRect(QRectF(next_x + 4.0, btn_y - 5.0, 2.0, 10), 1, 1)
         t2 = QPainterPath()
-        t2.moveTo(next_x - 5.5, btn_y - 5.5)
+        t2.moveTo(next_x - 5.0, btn_y - 5.0)
         t2.lineTo(next_x, btn_y)
-        t2.lineTo(next_x - 5.5, btn_y + 5.5)
+        t2.lineTo(next_x - 5.0, btn_y + 5.0)
         t2.closeSubpath()
         p.fillPath(t2, QColor(255, 255, 255, 240))
 
@@ -916,28 +957,28 @@ class NotchWindow(QWidget):
 
     def _paint_expanded_pomodoro(self, p: QPainter, bw: float, bh: float):
         # 1. Top Squircle Icon (Tomato) & Title
-        art_sz = 52.0
+        art_sz = 44.0
         art_x = 22.0
-        art_y = 16.0
+        art_y = 14.0
         art_path = QPainterPath()
-        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 10, 10)
         p.fillPath(art_path, QColor("#FF5722"))
-        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setFont(QFont("Segoe UI Emoji", 18))
         p.setPen(QColor(255, 255, 255, 255))
         p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "🍅")
 
         p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 245))
-        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, "Pomodoro Timer")
+        p.drawText(QRectF(76, 15, 240, 22), Qt.AlignmentFlag.AlignVCenter, "Pomodoro Timer")
 
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(QFont("Segoe UI", 9))
         p.setPen(QColor(180, 180, 195, 190))
         phase_lbl = "Focus Session" if self.pomodoro_service.phase == "focus" else "Short Break"
-        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"{phase_lbl} • {self.pomodoro_service.focus_min} Min")
+        p.drawText(QRectF(76, 37, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"{phase_lbl} • {self.pomodoro_service.focus_min} Min")
 
         # 2. Middle Row: Countdown Progress
         cx = bw / 2
-        cy = 92.0
+        cy = 96.0
         r = 38.0
         pct = 1.0 - (self.pomodoro_service.seconds_left / max(1, self.pomodoro_service.total_seconds))
         
@@ -956,7 +997,7 @@ class NotchWindow(QWidget):
         p.drawText(QRectF(cx - 50, cy - 14, 100, 28), Qt.AlignmentFlag.AlignCenter, f"{mins:02d}:{secs:02d}")
 
         # 3. Action Buttons [⏹ Reset]  [▶ Start / ⏸ Pause]  [⏭ Skip]
-        btn_y = 142.0
+        btn_y = 158.0
         # Reset
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 35))
@@ -983,13 +1024,13 @@ class NotchWindow(QWidget):
     # ─────────────────── Paint: Expanded Tasks ───────────────────────────────
 
     def _paint_expanded_tasks(self, p: QPainter, bw: float, bh: float):
-        art_sz = 52.0
+        art_sz = 44.0
         art_x = 22.0
-        art_y = 16.0
+        art_y = 14.0
         art_path = QPainterPath()
-        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 10, 10)
         p.fillPath(art_path, QColor("#3F51B5"))
-        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setFont(QFont("Segoe UI Emoji", 18))
         p.setPen(QColor(255, 255, 255, 255))
         p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "📋")
 
@@ -997,16 +1038,16 @@ class NotchWindow(QWidget):
         remaining = sum(1 for t in tasks if not t.get("completed"))
         p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 245))
-        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, "Tasks & Reminders")
+        p.drawText(QRectF(76, 15, 240, 22), Qt.AlignmentFlag.AlignVCenter, "Tasks & Reminders")
 
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(QFont("Segoe UI", 9))
         p.setPen(QColor(180, 180, 195, 190))
-        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"{remaining} pending tasks")
+        p.drawText(QRectF(76, 37, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"{remaining} pending tasks")
 
-        # 2-3 Task Items
-        start_y = 74.0
-        for i, t in enumerate(tasks[:2]):
-            ty = start_y + (i * 28.0)
+        # 3 Task Items
+        start_y = 68.0
+        for i, t in enumerate(tasks[:3]):
+            ty = start_y + (i * 26.0)
             is_done = t.get("completed", False)
             box_rect = QRectF(24, ty + 2, 16, 16)
             p.setPen(QPen(QColor(255, 255, 255, 180), 1.4))
@@ -1029,31 +1070,31 @@ class NotchWindow(QWidget):
         if not tasks:
             p.setFont(QFont("Segoe UI", 9))
             p.setPen(QColor(180, 180, 190, 160))
-            p.drawText(QRectF(24, 76, bw - 48, 20), Qt.AlignmentFlag.AlignLeft, "Tidak ada task. Tambahkan task baru di bawah.")
+            p.drawText(QRectF(24, 82, bw - 48, 20), Qt.AlignmentFlag.AlignLeft, "Tidak ada task. Tambahkan task baru di bawah.")
 
         # Bottom Actions: [+ Add Task] [Clear Done]
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(63, 81, 181, 220))
-        p.drawRoundedRect(QRectF(24, 138, 90, 26), 13, 13)
+        p.drawRoundedRect(QRectF(24, 158, 90, 26), 13, 13)
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 255))
-        p.drawText(QRectF(24, 138, 90, 26), Qt.AlignmentFlag.AlignCenter, "+ Add Task")
+        p.drawText(QRectF(24, 158, 90, 26), Qt.AlignmentFlag.AlignCenter, "+ Add Task")
 
         p.setBrush(QColor(255, 255, 255, 30))
-        p.drawRoundedRect(QRectF(122, 138, 90, 26), 13, 13)
+        p.drawRoundedRect(QRectF(122, 158, 90, 26), 13, 13)
         p.setPen(QColor(220, 220, 230, 200))
-        p.drawText(QRectF(122, 138, 90, 26), Qt.AlignmentFlag.AlignCenter, "Clear Done")
+        p.drawText(QRectF(122, 158, 90, 26), Qt.AlignmentFlag.AlignCenter, "Clear Done")
 
     # ─────────────────── Paint: Expanded Hydration ───────────────────────────
 
     def _paint_expanded_hydration(self, p: QPainter, bw: float, bh: float):
-        art_sz = 52.0
+        art_sz = 44.0
         art_x = 22.0
-        art_y = 16.0
+        art_y = 14.0
         art_path = QPainterPath()
-        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 10, 10)
         p.fillPath(art_path, QColor("#00BCD4"))
-        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setFont(QFont("Segoe UI Emoji", 18))
         p.setPen(QColor(255, 255, 255, 255))
         p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "💧")
 
@@ -1063,16 +1104,16 @@ class NotchWindow(QWidget):
 
         p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 245))
-        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, f"{cur:.2f} / {tgt:.1f} Liter Air")
+        p.drawText(QRectF(76, 15, 240, 22), Qt.AlignmentFlag.AlignVCenter, f"{cur:.2f} / {tgt:.1f} Liter Air")
 
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(QFont("Segoe UI", 9))
         p.setPen(QColor(180, 180, 195, 190))
-        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"Target Harian ({int(pct * 100)}% tercapai)")
+        p.drawText(QRectF(76, 37, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"Target Harian ({int(pct * 100)}% tercapai)")
 
         # Progress bar
         bar_w = bw - 52
         bar_x = 26
-        bar_y = 86
+        bar_y = 92
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 35))
         p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, 8), 4, 4)
@@ -1081,7 +1122,7 @@ class NotchWindow(QWidget):
 
         # Quick Buttons
         cx = bw / 2
-        btn_y = 138
+        btn_y = 154
         p.setBrush(QColor(0, 188, 212, 220))
         p.drawRoundedRect(QRectF(cx - 120, btn_y - 14, 72, 28), 14, 14)
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
@@ -1098,13 +1139,13 @@ class NotchWindow(QWidget):
     # ─────────────────── Paint: Expanded Control Center ──────────────────────
 
     def _paint_expanded_control_center(self, p: QPainter, bw: float, bh: float):
-        art_sz = 52.0
+        art_sz = 44.0
         art_x = 22.0
-        art_y = 16.0
+        art_y = 14.0
         art_path = QPainterPath()
-        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 10, 10)
         p.fillPath(art_path, QColor("#9C27B0"))
-        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setFont(QFont("Segoe UI Emoji", 18))
         p.setPen(QColor(255, 255, 255, 255))
         p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "🎛️")
 
@@ -1113,17 +1154,17 @@ class NotchWindow(QWidget):
 
         p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 245))
-        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, f"Volume Master: {vol}%")
+        p.drawText(QRectF(76, 15, 240, 22), Qt.AlignmentFlag.AlignVCenter, f"Volume Master: {vol}%")
 
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(QFont("Segoe UI", 9))
         p.setPen(QColor(180, 180, 195, 190))
         bat_str = f"🔋 Baterai: {bat['percent']}%" if bat.get("has_battery") else "⚡ Daya: Desktop AC"
-        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, bat_str)
+        p.drawText(QRectF(76, 37, 240, 18), Qt.AlignmentFlag.AlignVCenter, bat_str)
 
         # Volume slider
         bar_x = 26.0
         bar_w = bw - 52.0
-        bar_y = 86.0
+        bar_y = 92.0
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 35))
         p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, 8), 4, 4)
@@ -1136,10 +1177,10 @@ class NotchWindow(QWidget):
 
         # Mute Action Button
         p.setBrush(QColor(255, 255, 255, 35))
-        p.drawRoundedRect(QRectF(26, 126, 95, 28), 14, 14)
+        p.drawRoundedRect(QRectF(26, 150, 95, 28), 14, 14)
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 230))
-        p.drawText(QRectF(26, 126, 95, 28), Qt.AlignmentFlag.AlignCenter, "Mute Audio")
+        p.drawText(QRectF(26, 150, 95, 28), Qt.AlignmentFlag.AlignCenter, "Mute Audio")
 
     # ─────────────────── Mouse & Hit Testing ─────────────────────────────────
 
@@ -1166,34 +1207,47 @@ class NotchWindow(QWidget):
 
         # 3. Module Specific Hit Targets
         if self._active_module == "media":
-            # Mic icon
-            if QRectF(bw - 110, 18, 22, 22).contains(pos):
-                return "mic"
+            # Mode selector chips: [ 🖼️ Foto Saja ] [ 🎵 + Judul ] [ 📝 + Lirik ]
+            if 52 <= pos.y() <= 80:
+                chip_w = 92.0
+                gap = 6.0
+                total_w = (chip_w * 3) + (gap * 2)
+                start_x = (bw - total_w) / 2.0
+                for i, mode_key in enumerate(["minimal", "compact", "lyrics"]):
+                    x = start_x + (i * (chip_w + gap))
+                    if x <= pos.x() <= x + chip_w:
+                        return f"mode_{mode_key}"
+
+            # Lyrics banner
+            if 82 <= pos.y() <= 122 and 20 <= pos.x() <= bw - 20:
+                return "lyric_pill"
+
+            # Chevrons & Slider
+            pad_x = 22.0
+            bar_y = 132.0
+            if QRectF(pad_x - 12, bar_y - 12, 26, 24).contains(pos):
+                return "chevron_left"
+            if QRectF(bw - pad_x - 14, bar_y - 12, 26, 24).contains(pos):
+                return "chevron_right"
+
+            slider_x = pad_x + 52
+            slider_w = bw - (pad_x * 2) - 104
+            if slider_x <= pos.x() <= slider_x + slider_w and (bar_y - 10) <= pos.y() <= (bar_y + 10):
+                return "slider"
+
             # Media buttons
             cx = bw / 2
-            btn_y = 138.0
-            if math.hypot(pos.x() - cx, pos.y() - btn_y) <= 22:
+            btn_y = 168.0
+            if math.hypot(pos.x() - cx, pos.y() - btn_y) <= 20:
                 return "play"
-            if math.hypot(pos.x() - (cx - 54), pos.y() - btn_y) <= 19:
+            if math.hypot(pos.x() - (cx - 52), pos.y() - btn_y) <= 17:
                 return "prev"
-            if math.hypot(pos.x() - (cx + 54), pos.y() - btn_y) <= 19:
+            if math.hypot(pos.x() - (cx + 52), pos.y() - btn_y) <= 17:
                 return "next"
-            # Chevrons < and > on sides
-            pad_x = 22.0
-            bar_y = 86.0
-            if QRectF(pad_x - 10, bar_y - 10, 24, 20).contains(pos):
-                return "chevron_left"
-            if QRectF(bw - pad_x - 14, bar_y - 10, 24, 20).contains(pos):
-                return "chevron_right"
-            # Slider
-            slider_x = pad_x + 56
-            slider_w = bw - (pad_x * 2) - 112
-            if slider_x <= pos.x() <= slider_x + slider_w and 74 <= pos.y() <= 98:
-                return "slider"
 
         elif self._active_module == "pomodoro":
             cx = bw / 2
-            btn_y = 142.0
+            btn_y = 158.0
             if QRectF(cx - 85, btn_y - 14, 40, 28).contains(pos):
                 return "pomo_reset"
             if QRectF(cx - 38, btn_y - 15, 76, 30).contains(pos):
@@ -1202,19 +1256,19 @@ class NotchWindow(QWidget):
                 return "pomo_skip"
 
         elif self._active_module == "tasks":
-            if QRectF(24, 138, 90, 26).contains(pos):
+            if QRectF(24, 158, 90, 26).contains(pos):
                 return "task_add"
-            if QRectF(122, 138, 90, 26).contains(pos):
+            if QRectF(122, 158, 90, 26).contains(pos):
                 return "task_clear"
-            start_y = 74.0
-            for i in range(2):
-                ty = start_y + (i * 28.0)
+            start_y = 68.0
+            for i in range(3):
+                ty = start_y + (i * 26.0)
                 if QRectF(20, ty, 28, 22).contains(pos):
                     return f"task_check_{i}"
 
         elif self._active_module == "hydration":
             cx = bw / 2
-            btn_y = 138.0
+            btn_y = 154.0
             if QRectF(cx - 120, btn_y - 14, 72, 28).contains(pos):
                 return "hydra_250"
             if QRectF(cx - 36, btn_y - 14, 72, 28).contains(pos):
@@ -1225,9 +1279,9 @@ class NotchWindow(QWidget):
         elif self._active_module == "control_center":
             bar_x = 26.0
             bar_w = bw - 52.0
-            if bar_x <= pos.x() <= bar_x + bar_w and 76 <= pos.y() <= 98:
+            if bar_x <= pos.x() <= bar_x + bar_w and 82 <= pos.y() <= 104:
                 return "vol_slider"
-            if QRectF(26, 126, 95, 28).contains(pos):
+            if QRectF(26, 150, 95, 28).contains(pos):
                 return "vol_mute"
 
         return "body"
@@ -1251,6 +1305,19 @@ class NotchWindow(QWidget):
             if target.startswith("dot_"):
                 mod = target.replace("dot_", "")
                 self.set_active_module(mod)
+                return
+
+            # Collapsed mode selector chips (Foto Saja, + Judul, + Lirik)
+            if target.startswith("mode_"):
+                mode = target.replace("mode_", "")
+                self._collapsed_mode = mode
+                self.config.set("collapsed_mode", mode)
+                self.update()
+                return
+
+            if target == "lyric_pill":
+                # Clicking the lyrics banner refreshes / updates view
+                self.update()
                 return
 
             # Chevrons page cycle
