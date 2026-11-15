@@ -1,0 +1,7 @@
+PyQt6>=6.5.0
+PyQt6-Fluent-Widgets>=1.5.0
+PyQt-Frameless-Window>=0.3.0
+winsdk>=1.0.0b9
+pycaw>=20260927
+psutil>=5.9.0
+comtypes>=1.4.8
