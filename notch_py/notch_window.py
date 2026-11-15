@@ -1,11 +1,11 @@
 """
 NotchWindow — Dynamic Island for Windows v2.0
-Supports:
-- Anchored Mode (flush top bezel) & Floating Mode (capsule pill with customizable offset)
-- True Liquid Glass (custom opacity, specular highlight, ambient glow) & Obsidian (deep black)
-- Modules: Media Player, Pomodoro Timer, Task Reminders, Hydration Tracker, Control Center, Notification Hub
-- Split Pill rendering when multiple activities run concurrently
-- Smooth Qt spring/cubic animations
+Features:
+- Pure Liquid Glass & Obsidian Themes (100% transparent corners, no black boxes)
+- Anchored Mode (top bezel flush) & Floating Mode (capsule pill with customizable offset)
+- Bottom Carousel Dots indicator & Swipe / Drag / Scroll gestures to switch modules
+- 5 Integrated Modules: Media Player, Pomodoro Timer, Tasks & Reminders, Hydration, Control Center
+- Live Synced 3-Line Lyrics, WinRT Notifications, SQLite Task Persistence
 """
 
 import math
@@ -26,16 +26,21 @@ try:
 except ImportError:
     from notch_py.color_thief import extract_accent_color
 
-from services import (
-    PomodoroService, TaskService, HydrationService, SystemService, NotificationService
-)
+try:
+    from services import (
+        PomodoroService, TaskService, HydrationService, SystemService, NotificationService
+    )
+except ImportError:
+    from notch_py.services import (
+        PomodoroService, TaskService, HydrationService, SystemService, NotificationService
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layout Constants
 # ─────────────────────────────────────────────────────────────────────────────
-EXPANDED_W          = 480
-EXPANDED_H          = 220
+EXPANDED_W          = 460
+EXPANDED_H          = 192
 EXPANDED_R          = 26.0
 
 COLLAPSED_MIN_W     = 200
@@ -44,6 +49,7 @@ COLLAPSED_LYRIC_W   = 430
 COLLAPSED_H         = 38
 
 ANIM_MS = 280
+MODULE_LIST = ["media", "pomodoro", "tasks", "hydration", "control_center"]
 
 
 class NotchWindow(QWidget):
@@ -59,13 +65,13 @@ class NotchWindow(QWidget):
         self.lyrics_engine = lyrics_engine
 
         # Initialize or assign modular services
-        self.pomodoro_service   = pomodoro_service or PomodoroService(config)
-        self.task_service       = task_service or TaskService()
-        self.hydration_service  = hydration_service or HydrationService(config)
-        self.system_service     = system_service or SystemService()
+        self.pomodoro_service     = pomodoro_service or PomodoroService(config)
+        self.task_service         = task_service or TaskService()
+        self.hydration_service    = hydration_service or HydrationService(config)
+        self.system_service       = system_service or SystemService()
         self.notification_service = notification_service or NotificationService(config)
 
-        # Frameless, Always on Top, Tool window (hidden from taskbar/Alt-Tab)
+        # Frameless, Always on Top, Tool window
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
@@ -83,6 +89,8 @@ class NotchWindow(QWidget):
         self._collapsed_mode    = self.config.get("collapsed_mode", "compact")
 
         self._drag_pos          = QPoint()
+        self._swipe_start_pos   = QPointF()
+        self._swipe_triggered   = False
         self._accent            = QColor(config.get("custom_accent", "#1ED760"))
         self._wave_step         = 0.0
 
@@ -135,6 +143,32 @@ class NotchWindow(QWidget):
 
         self._connect_signals()
         self._position_to_screen()
+
+    # ─────────────────── Module Navigation ───────────────────────────────────
+
+    def next_module(self):
+        try:
+            idx = MODULE_LIST.index(self._active_module)
+            new_idx = (idx + 1) % len(MODULE_LIST)
+        except ValueError:
+            new_idx = 0
+        self.set_active_module(MODULE_LIST[new_idx])
+
+    def prev_module(self):
+        try:
+            idx = MODULE_LIST.index(self._active_module)
+            new_idx = (idx - 1) % len(MODULE_LIST)
+        except ValueError:
+            new_idx = 0
+        self.set_active_module(MODULE_LIST[new_idx])
+
+    def set_active_module(self, module_name: str):
+        if module_name in MODULE_LIST:
+            self._active_module = module_name
+            self.config.set("active_module", module_name)
+            if not self._is_expanded:
+                self._position_to_screen()
+            self.update()
 
     # ─────────────────── Geometry & Screen Positioning ───────────────────────
 
@@ -352,13 +386,6 @@ class NotchWindow(QWidget):
     def toggle_expand(self):
         self.collapse() if self._is_expanded else self.expand()
 
-    def set_active_module(self, module_name: str):
-        self._active_module = module_name
-        self.config.set("active_module", module_name)
-        if not self._is_expanded:
-            self._position_to_screen()
-        self.update()
-
     def _animate_to(self, target_w: int, target_h: int):
         x = self._screen_center_x(target_w)
         y = self._screen_pos_y()
@@ -384,7 +411,6 @@ class NotchWindow(QWidget):
     def _auto_collapse(self):
         if not self._is_expanded:
             return
-        # Don't auto collapse if mouse is hovering over window
         if self.rect().contains(self.mapFromGlobal(QCursor.pos())):
             return
         self.collapse()
@@ -394,7 +420,6 @@ class NotchWindow(QWidget):
     def _create_collapsed_path(self, w: float, h: float) -> QPainterPath:
         path = QPainterPath()
         if self._layout_mode == "anchored":
-            # Organic concave notch attached to top bezel (Image 2 replica)
             flare_w = 26.0
             flare_h = 16.0
             r = 16.0
@@ -409,7 +434,6 @@ class NotchWindow(QWidget):
             path.lineTo(0, 0)
             path.closeSubpath()
         else:
-            # Floating capsule pill
             path.addRoundedRect(0, 0, w, h, h / 2.0, h / 2.0)
         return path
 
@@ -436,28 +460,22 @@ class NotchWindow(QWidget):
         else:
             self._paint_collapsed_view(p, bw, bh)
 
-        # 3. Privacy Indicator Dots (Mic / Camera in top-right)
-        if self.config.get("privacy_indicators", True):
-            self._draw_privacy_indicators(p, bw)
-
         p.end()
 
     def _paint_background_glass(self, p: QPainter, path: QPainterPath, bw: float, bh: float):
-        """Draws either customizable Liquid Glass or deep Obsidian background."""
         if self._theme_style == "obsidian":
-            # Deep Obsidian black
             p.fillPath(path, QColor(8, 9, 12, 248))
             p.setPen(QPen(QColor(255, 255, 255, 30), 1.0))
             p.drawPath(path)
             return
 
-        # Liquid Glass Mode (customizable opacity & specular refraction)
+        # Liquid Glass Mode
         op = float(self.config.get("opacity", 0.72))
         alpha = int(max(0.3, min(0.95, op)) * 255)
         base_color = QColor(14, 17, 24, alpha)
         p.fillPath(path, base_color)
 
-        # Specular Curved Highlight Glare at top edge
+        # Specular Curved Glare at top edge
         glare = QLinearGradient(0, 0, 0, min(36.0, bh))
         glare.setColorAt(0.0, QColor(255, 255, 255, 45))
         glare.setColorAt(0.2, QColor(255, 255, 255, 18))
@@ -466,8 +484,8 @@ class NotchWindow(QWidget):
 
         # Dynamic Ambient Tint from active module / album accent
         ac = self._get_module_accent()
-        glow = QRadialGradient(bw * 0.5, bh * 0.9, bw * 0.6)
-        glow.setColorAt(0.0, QColor(ac.red(), ac.green(), ac.blue(), 110))
+        glow = QRadialGradient(bw * 0.5, bh * 0.88, bw * 0.6)
+        glow.setColorAt(0.0, QColor(ac.red(), ac.green(), ac.blue(), 115))
         glow.setColorAt(0.6, QColor(ac.red(), ac.green(), ac.blue(), 25))
         glow.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.fillPath(path, QBrush(glow))
@@ -490,21 +508,15 @@ class NotchWindow(QWidget):
             return QColor("#9C27B0")  # Purple
         return self._accent           # Music dynamic accent
 
-    def _draw_privacy_indicators(self, p: QPainter, bw: float):
-        """Draws subtle iOS/macOS green/orange indicator dots if privacy monitoring enabled."""
-        pass  # Reserved for active mic/camera hooks
-
     # ─────────────────── Paint: Collapsed View ───────────────────────────────
 
     def _paint_collapsed_view(self, p: QPainter, bw: float, bh: float):
         flare_w = 26.0 if self._layout_mode == "anchored" else 0.0
 
-        # A. Notification Toast Banner
         if self._active_banner:
             self._paint_collapsed_notification_banner(p, bw, bh, flare_w)
             return
 
-        # B. Module-specific collapsed state
         if self._active_module == "pomodoro":
             self._paint_collapsed_pomodoro(p, bw, bh, flare_w)
         elif self._active_module == "tasks":
@@ -533,12 +545,10 @@ class NotchWindow(QWidget):
 
     def _paint_collapsed_pomodoro(self, p: QPainter, bw: float, bh: float, flare_w: float):
         left_x = flare_w + 14.0
-        # Mini tomato icon
         p.setFont(QFont("Segoe UI Emoji", 10))
         p.setPen(QColor(255, 255, 255, 240))
         p.drawText(QRectF(left_x, 0, 20, bh), Qt.AlignmentFlag.AlignVCenter, "🍅")
 
-        # Timer countdown text
         mins = self.pomodoro_service.seconds_left // 60
         secs = self.pomodoro_service.seconds_left % 60
         time_str = f"{mins:02d}:{secs:02d}"
@@ -548,7 +558,6 @@ class NotchWindow(QWidget):
         p.setPen(QColor(255, 255, 255, 240))
         p.drawText(QRectF(left_x + 24, 0, 110, bh), Qt.AlignmentFlag.AlignVCenter, f"{phase_lbl} {time_str}")
 
-        # Mini arc progress
         pct = 1.0 - (self.pomodoro_service.seconds_left / max(1, self.pomodoro_service.total_seconds))
         ring_x = bw - flare_w - 24
         p.setPen(QPen(QColor(255, 255, 255, 40), 2.5))
@@ -564,7 +573,7 @@ class NotchWindow(QWidget):
 
         tasks = self.task_service.get_tasks()
         remaining = sum(1 for t in tasks if not t.get("completed"))
-        msg = f"{remaining} tasks pending" if remaining > 0 else "All tasks completed! ✓"
+        msg = f"{remaining} tasks pending" if remaining > 0 else "All tasks done! ✓"
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 240))
         p.drawText(QRectF(left_x + 24, 0, bw - left_x - 30, bh), Qt.AlignmentFlag.AlignVCenter, msg)
@@ -670,10 +679,13 @@ class NotchWindow(QWidget):
     # ─────────────────── Paint: Expanded View ────────────────────────────────
 
     def _paint_expanded_view(self, p: QPainter, bw: float, bh: float):
-        # 1. Top Subheader: Module Switcher Tabs & Close Button
-        self._paint_expanded_module_tabs(p, bw)
+        # 1. Close button '✕' at top right
+        close_x = bw - 20
+        p.setPen(QPen(QColor(255, 255, 255, 180), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(QPointF(close_x - 10, 18), QPointF(close_x - 2, 26))
+        p.drawLine(QPointF(close_x - 2, 18), QPointF(close_x - 10, 26))
 
-        # 2. Render content based on active module
+        # 2. Render active module content
         if self._active_module == "pomodoro":
             self._paint_expanded_pomodoro(p, bw, bh)
         elif self._active_module == "tasks":
@@ -682,54 +694,36 @@ class NotchWindow(QWidget):
             self._paint_expanded_hydration(p, bw, bh)
         elif self._active_module == "control_center":
             self._paint_expanded_control_center(p, bw, bh)
-        elif self._active_module == "notifications":
-            self._paint_expanded_notifications(p, bw, bh)
         else:
             self._paint_expanded_media(p, bw, bh)
 
-    def _paint_expanded_module_tabs(self, p: QPainter, bw: float):
-        """Top strip with module selection pills and Close button."""
-        tabs = [
-            ("media", "🎵 Music"),
-            ("pomodoro", "⏱️ Timer"),
-            ("tasks", "📋 Tasks"),
-            ("hydration", "💧 Water"),
-            ("control_center", "🎛️ Control")
-        ]
-        start_x = 20.0
-        tab_y = 12.0
-        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        # 3. Bottom Carousel Dots
+        self._draw_carousel_dots(p, bw, bh - 13.0)
 
-        for mod_id, label in tabs:
-            is_active = (self._active_module == mod_id)
-            fm = QFontMetrics(p.font())
-            text_w = fm.horizontalAdvance(label) + 16
-            tab_rect = QRectF(start_x, tab_y, text_w, 20)
+    def _draw_carousel_dots(self, p: QPainter, bw: float, dot_y: float):
+        """Draws carousel indicator dots for module paging matching user design."""
+        n = len(MODULE_LIST)
+        spacing = 15.0
+        start_x = (bw - ((n - 1) * spacing)) / 2.0
+        curr_idx = MODULE_LIST.index(self._active_module) if self._active_module in MODULE_LIST else 0
 
-            if is_active:
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(255, 255, 255, 45))
-                p.drawRoundedRect(tab_rect, 10, 10)
-                p.setPen(QColor(255, 255, 255, 255))
+        for i in range(n):
+            dx = start_x + (i * spacing)
+            p.setPen(Qt.PenStyle.NoPen)
+            if i == curr_idx:
+                p.setBrush(QColor(255, 255, 255, 240))
+                p.drawRoundedRect(QRectF(dx - 5.0, dot_y - 2.0, 10.0, 4.0), 2.0, 2.0)
             else:
-                p.setPen(QColor(255, 255, 255, 120))
-
-            p.drawText(tab_rect, Qt.AlignmentFlag.AlignCenter, label)
-            start_x += text_w + 6
-
-        # Close '✕' button at far right
-        close_rect = QRectF(bw - 32, tab_y, 20, 20)
-        p.setPen(QPen(QColor(255, 255, 255, 190), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawLine(QPointF(bw - 28, tab_y + 4), QPointF(bw - 16, tab_y + 16))
-        p.drawLine(QPointF(bw - 16, tab_y + 4), QPointF(bw - 28, tab_y + 16))
+                p.setBrush(QColor(255, 255, 255, 75))
+                p.drawEllipse(QPointF(dx, dot_y), 2.2, 2.2)
 
     # ─────────────────── Paint: Expanded Media (Image 1 Replica) ─────────────
 
     def _paint_expanded_media(self, p: QPainter, bw: float, bh: float):
-        # 1. Album Art Squircle (50x50, r=12)
+        # 1. Album Art Squircle (52x52, r=12)
         art_sz = 52.0
         art_x = 22.0
-        art_y = 44.0
+        art_y = 16.0
         art_path = QPainterPath()
         art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
 
@@ -758,31 +752,31 @@ class NotchWindow(QWidget):
         p.drawPath(art_path)
 
         # 2. Title & Artist
+        avail_t = bw - 88 - 140
         p.setPen(QColor(255, 255, 255, 245))
         title_font = QFont("Segoe UI", 12, QFont.Weight.Bold)
         p.setFont(title_font)
         tfm = QFontMetrics(title_font)
-        avail_t = bw - 88 - 140
         t_elided = tfm.elidedText(self._title, Qt.TextElideMode.ElideRight, int(avail_t))
-        p.drawText(QRectF(88, 44, avail_t, 22), Qt.AlignmentFlag.AlignVCenter, t_elided)
+        p.drawText(QRectF(88, 17, avail_t, 22), Qt.AlignmentFlag.AlignVCenter, t_elided)
 
         p.setPen(QColor(180, 180, 195, 190))
         artist_font = QFont("Segoe UI", 10)
         p.setFont(artist_font)
         afm = QFontMetrics(artist_font)
         a_elided = afm.elidedText(self._artist, Qt.TextElideMode.ElideRight, int(avail_t))
-        p.drawText(QRectF(88, 68, avail_t, 18), Qt.AlignmentFlag.AlignVCenter, a_elided)
+        p.drawText(QRectF(88, 41, avail_t, 18), Qt.AlignmentFlag.AlignVCenter, a_elided)
 
         # 3. Top-Right Icons: [🎤 Mic] [Equalizer] [Source Badge]
-        right_x = bw - 22
-        spot_x = right_x - 14
+        right_x = bw - 20
+        spot_x = right_x - 28
         p.setPen(Qt.PenStyle.NoPen)
         spot_color = QColor("#1DB954") if "spotify" in self._source.lower() else self._accent
         p.setBrush(spot_color)
-        p.drawEllipse(QPointF(spot_x, 54), 8, 8)
+        p.drawEllipse(QPointF(spot_x, 26), 8, 8)
 
         eq_x = spot_x - 24
-        self._draw_equalizer_bars(p, eq_x - 20, 54, 20.0, 16.0)
+        self._draw_equalizer_bars(p, eq_x - 20, 26, 20.0, 16.0)
 
         # Microphone Icon (Toggle Lyrics view)
         mic_x = eq_x - 30
@@ -790,32 +784,38 @@ class NotchWindow(QWidget):
         mic_color = self._accent if mic_active else QColor(255, 255, 255, 200)
         p.setPen(QPen(mic_color, 1.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(QRectF(mic_x - 3, 48, 6, 9), 3, 3)
-        p.drawArc(QRectF(mic_x - 5, 50, 10, 8), 190 * 16, 160 * 16)
-        p.drawLine(QPointF(mic_x, 58), QPointF(mic_x, 61))
+        p.drawRoundedRect(QRectF(mic_x - 3, 20, 6, 9), 3, 3)
+        p.drawArc(QRectF(mic_x - 5, 22, 10, 8), 190 * 16, 160 * 16)
+        p.drawLine(QPointF(mic_x, 30), QPointF(mic_x, 33))
 
         # 4. Middle Row: Slider or Synced Lyrics
         if self._expanded_page == "lyrics":
-            self._draw_expanded_lyrics_view(p, bw, 110)
+            self._draw_expanded_lyrics_view(p, bw, 86)
         else:
-            self._draw_expanded_slider_view(p, bw, 110)
+            self._draw_expanded_slider_view(p, bw, 86)
 
         # 5. Bottom Row: 3 Circular Glass Controls
-        self._draw_expanded_controls(p, bw, 168)
+        self._draw_expanded_controls(p, bw, 138)
 
     def _draw_expanded_slider_view(self, p: QPainter, bw: float, bar_y: float):
-        pad_x = 24.0
+        pad_x = 22.0
+        # Chevrons < and > on sides
+        p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 160))
+        p.drawText(QRectF(pad_x - 6, bar_y - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, "‹")
+        p.drawText(QRectF(bw - pad_x - 10, bar_y - 8, 16, 16), Qt.AlignmentFlag.AlignCenter, "›")
+
         p.setPen(QColor(160, 160, 175, 170))
         p.setFont(QFont("Segoe UI", 9))
         pos_s = self._pos_ms // 1000
         dur_s = self._dur_ms // 1000
         time_left = max(0, dur_s - pos_s)
 
-        p.drawText(QRectF(pad_x + 12, bar_y - 8, 38, 16), Qt.AlignmentFlag.AlignLeft, f"{pos_s // 60}:{pos_s % 60:02d}")
-        p.drawText(QRectF(bw - pad_x - 50, bar_y - 8, 38, 16), Qt.AlignmentFlag.AlignRight, f"-{time_left // 60}:{time_left % 60:02d}")
+        p.drawText(QRectF(pad_x + 14, bar_y - 8, 38, 16), Qt.AlignmentFlag.AlignLeft, f"{pos_s // 60}:{pos_s % 60:02d}")
+        p.drawText(QRectF(bw - pad_x - 52, bar_y - 8, 38, 16), Qt.AlignmentFlag.AlignRight, f"-{time_left // 60}:{time_left % 60:02d}")
 
-        slider_x = pad_x + 52
-        slider_w = bw - (pad_x * 2) - 104
+        slider_x = pad_x + 56
+        slider_w = bw - (pad_x * 2) - 112
         track_h = 3.5
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 40))
@@ -839,7 +839,6 @@ class NotchWindow(QWidget):
             p.setPen(QColor(180, 180, 200, 90))
             p.drawText(QRectF(pad, top_y - 14, w, 12), Qt.AlignmentFlag.AlignCenter, self._lyric_prev_text)
 
-        # Active Line
         active_txt = self._lyric_text if self._lyric_text else "♪ Instrumental ♪"
         pill_rect = QRectF(pad + 10, top_y + 2, w - 20, 22)
         p.setPen(Qt.PenStyle.NoPen)
@@ -875,7 +874,7 @@ class NotchWindow(QWidget):
             p.drawEllipse(QPointF(bx, by), br, br)
 
         # Center Play/Pause button
-        draw_glass_btn(cx, btn_y, 21, is_center=True)
+        draw_glass_btn(cx, btn_y, 20, is_center=True)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 255))
         if self._is_playing:
@@ -890,8 +889,8 @@ class NotchWindow(QWidget):
             p.fillPath(tri, QColor(255, 255, 255, 255))
 
         # Prev button
-        prev_x = cx - 56
-        draw_glass_btn(prev_x, btn_y, 18)
+        prev_x = cx - 54
+        draw_glass_btn(prev_x, btn_y, 17)
         p.setBrush(QColor(255, 255, 255, 240))
         p.drawRoundedRect(QRectF(prev_x - 7.0, btn_y - 5.5, 2.0, 11), 1, 1)
         t1 = QPainterPath()
@@ -902,8 +901,8 @@ class NotchWindow(QWidget):
         p.fillPath(t1, QColor(255, 255, 255, 240))
 
         # Next button
-        next_x = cx + 56
-        draw_glass_btn(next_x, btn_y, 18)
+        next_x = cx + 54
+        draw_glass_btn(next_x, btn_y, 17)
         p.setBrush(QColor(255, 255, 255, 240))
         p.drawRoundedRect(QRectF(next_x + 5.0, btn_y - 5.5, 2.0, 11), 1, 1)
         t2 = QPainterPath()
@@ -916,163 +915,215 @@ class NotchWindow(QWidget):
     # ─────────────────── Paint: Expanded Pomodoro ────────────────────────────
 
     def _paint_expanded_pomodoro(self, p: QPainter, bw: float, bh: float):
-        cx = bw / 2
-        cy = 115.0
-        r = 50.0
+        # 1. Top Squircle Icon (Tomato) & Title
+        art_sz = 52.0
+        art_x = 22.0
+        art_y = 16.0
+        art_path = QPainterPath()
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        p.fillPath(art_path, QColor("#FF5722"))
+        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setPen(QColor(255, 255, 255, 255))
+        p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "🍅")
 
+        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 245))
+        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, "Pomodoro Timer")
+
+        p.setFont(QFont("Segoe UI", 10))
+        p.setPen(QColor(180, 180, 195, 190))
+        phase_lbl = "Focus Session" if self.pomodoro_service.phase == "focus" else "Short Break"
+        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"{phase_lbl} • {self.pomodoro_service.focus_min} Min")
+
+        # 2. Middle Row: Countdown Progress
+        cx = bw / 2
+        cy = 92.0
+        r = 38.0
         pct = 1.0 - (self.pomodoro_service.seconds_left / max(1, self.pomodoro_service.total_seconds))
-        # Background ring
-        p.setPen(QPen(QColor(255, 255, 255, 30), 6.0))
+        
+        p.setPen(QPen(QColor(255, 255, 255, 28), 5.0))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(QPointF(cx, cy), r, r)
 
-        # Active progress arc
         ac = QColor("#FF5722") if self.pomodoro_service.phase == "focus" else QColor("#4CAF50")
-        p.setPen(QPen(ac, 6.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.setPen(QPen(ac, 5.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawArc(QRectF(cx - r, cy - r, r * 2, r * 2), 90 * 16, int(-pct * 360 * 16))
 
-        # Countdown Text
         mins = self.pomodoro_service.seconds_left // 60
         secs = self.pomodoro_service.seconds_left % 60
-        p.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        p.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 250))
-        p.drawText(QRectF(cx - 60, cy - 20, 120, 28), Qt.AlignmentFlag.AlignCenter, f"{mins:02d}:{secs:02d}")
+        p.drawText(QRectF(cx - 50, cy - 14, 100, 28), Qt.AlignmentFlag.AlignCenter, f"{mins:02d}:{secs:02d}")
 
-        phase_title = "Focus Time" if self.pomodoro_service.phase == "focus" else "Break Time"
-        p.setFont(QFont("Segoe UI", 9))
-        p.setPen(QColor(180, 180, 200, 180))
-        p.drawText(QRectF(cx - 60, cy + 8, 120, 16), Qt.AlignmentFlag.AlignCenter, phase_title)
-
-        # Bottom Controls: [⏹ Reset]  [▶ Start / ⏸ Pause]  [⏭ Skip]
-        btn_y = 188.0
+        # 3. Action Buttons [⏹ Reset]  [▶ Start / ⏸ Pause]  [⏭ Skip]
+        btn_y = 142.0
         # Reset
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 35))
-        p.drawRoundedRect(QRectF(cx - 100, btn_y - 14, 45, 28), 14, 14)
-        p.setFont(QFont("Segoe UI Emoji", 11))
+        p.drawRoundedRect(QRectF(cx - 85, btn_y - 14, 40, 28), 14, 14)
+        p.setFont(QFont("Segoe UI Emoji", 10))
         p.setPen(QColor(255, 255, 255, 220))
-        p.drawText(QRectF(cx - 100, btn_y - 14, 45, 28), Qt.AlignmentFlag.AlignCenter, "⏹")
+        p.drawText(QRectF(cx - 85, btn_y - 14, 40, 28), Qt.AlignmentFlag.AlignCenter, "⏹")
 
         # Play/Pause
         p.setBrush(ac)
-        p.drawRoundedRect(QRectF(cx - 40, btn_y - 15, 80, 30), 15, 15)
+        p.drawRoundedRect(QRectF(cx - 38, btn_y - 15, 76, 30), 15, 15)
         p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 255))
         btn_lbl = "Pause" if self.pomodoro_service.is_running else "Start"
-        p.drawText(QRectF(cx - 40, btn_y - 15, 80, 30), Qt.AlignmentFlag.AlignCenter, btn_lbl)
+        p.drawText(QRectF(cx - 38, btn_y - 15, 76, 30), Qt.AlignmentFlag.AlignCenter, btn_lbl)
 
         # Skip
         p.setBrush(QColor(255, 255, 255, 35))
-        p.drawRoundedRect(QRectF(cx + 55, btn_y - 14, 45, 28), 14, 14)
-        p.setFont(QFont("Segoe UI Emoji", 11))
+        p.drawRoundedRect(QRectF(cx + 45, btn_y - 14, 40, 28), 14, 14)
+        p.setFont(QFont("Segoe UI Emoji", 10))
         p.setPen(QColor(255, 255, 255, 220))
-        p.drawText(QRectF(cx + 55, btn_y - 14, 45, 28), Qt.AlignmentFlag.AlignCenter, "⏭")
+        p.drawText(QRectF(cx + 45, btn_y - 14, 40, 28), Qt.AlignmentFlag.AlignCenter, "⏭")
 
     # ─────────────────── Paint: Expanded Tasks ───────────────────────────────
 
     def _paint_expanded_tasks(self, p: QPainter, bw: float, bh: float):
-        tasks = self.task_service.get_tasks()[:4]
-        start_y = 44.0
+        art_sz = 52.0
+        art_x = 22.0
+        art_y = 16.0
+        art_path = QPainterPath()
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        p.fillPath(art_path, QColor("#3F51B5"))
+        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setPen(QColor(255, 255, 255, 255))
+        p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "📋")
 
-        for i, t in enumerate(tasks):
-            ty = start_y + (i * 32.0)
+        tasks = self.task_service.get_tasks()
+        remaining = sum(1 for t in tasks if not t.get("completed"))
+        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 245))
+        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, "Tasks & Reminders")
+
+        p.setFont(QFont("Segoe UI", 10))
+        p.setPen(QColor(180, 180, 195, 190))
+        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"{remaining} pending tasks")
+
+        # 2-3 Task Items
+        start_y = 74.0
+        for i, t in enumerate(tasks[:2]):
+            ty = start_y + (i * 28.0)
             is_done = t.get("completed", False)
-
-            # Checkbox circle
-            box_rect = QRectF(24, ty + 2, 18, 18)
-            p.setPen(QPen(QColor(255, 255, 255, 180), 1.5))
+            box_rect = QRectF(24, ty + 2, 16, 16)
+            p.setPen(QPen(QColor(255, 255, 255, 180), 1.4))
             if is_done:
                 p.setBrush(QColor("#4CAF50"))
-                p.drawRoundedRect(box_rect, 9, 9)
+                p.drawRoundedRect(box_rect, 8, 8)
                 p.setPen(QColor(255, 255, 255, 255))
-                p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+                p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
                 p.drawText(box_rect, Qt.AlignmentFlag.AlignCenter, "✓")
             else:
                 p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawRoundedRect(box_rect, 9, 9)
+                p.drawRoundedRect(box_rect, 8, 8)
 
-            # Task Text
-            font = QFont("Segoe UI", 10)
+            font = QFont("Segoe UI", 9)
             font.setStrikeOut(is_done)
             p.setFont(font)
             p.setPen(QColor(180, 180, 190, 140) if is_done else QColor(255, 255, 255, 240))
-            p.drawText(QRectF(52, ty, bw - 110, 22), Qt.AlignmentFlag.AlignVCenter, t.get("title"))
+            p.drawText(QRectF(50, ty, bw - 90, 20), Qt.AlignmentFlag.AlignVCenter, t.get("title"))
 
         if not tasks:
-            p.setFont(QFont("Segoe UI", 10))
+            p.setFont(QFont("Segoe UI", 9))
             p.setPen(QColor(180, 180, 190, 160))
-            p.drawText(QRectF(0, 80, bw, 40), Qt.AlignmentFlag.AlignCenter, "Tidak ada task. Klik '+ Add Task' untuk menambah.")
+            p.drawText(QRectF(24, 76, bw - 48, 20), Qt.AlignmentFlag.AlignLeft, "Tidak ada task. Tambahkan task baru di bawah.")
 
-        # Bottom Task Actions
+        # Bottom Actions: [+ Add Task] [Clear Done]
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(63, 81, 181, 210))
-        p.drawRoundedRect(QRectF(24, bh - 38, 95, 26), 13, 13)
+        p.setBrush(QColor(63, 81, 181, 220))
+        p.drawRoundedRect(QRectF(24, 138, 90, 26), 13, 13)
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 255))
-        p.drawText(QRectF(24, bh - 38, 95, 26), Qt.AlignmentFlag.AlignCenter, "+ Add Task")
+        p.drawText(QRectF(24, 138, 90, 26), Qt.AlignmentFlag.AlignCenter, "+ Add Task")
 
         p.setBrush(QColor(255, 255, 255, 30))
-        p.drawRoundedRect(QRectF(128, bh - 38, 100, 26), 13, 13)
+        p.drawRoundedRect(QRectF(122, 138, 90, 26), 13, 13)
         p.setPen(QColor(220, 220, 230, 200))
-        p.drawText(QRectF(128, bh - 38, 100, 26), Qt.AlignmentFlag.AlignCenter, "Clear Done")
+        p.drawText(QRectF(122, 138, 90, 26), Qt.AlignmentFlag.AlignCenter, "Clear Done")
 
     # ─────────────────── Paint: Expanded Hydration ───────────────────────────
 
     def _paint_expanded_hydration(self, p: QPainter, bw: float, bh: float):
-        cx = bw / 2
+        art_sz = 52.0
+        art_x = 22.0
+        art_y = 16.0
+        art_path = QPainterPath()
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        p.fillPath(art_path, QColor("#00BCD4"))
+        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setPen(QColor(255, 255, 255, 255))
+        p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "💧")
+
         cur = self.hydration_service.current_l
         tgt = self.hydration_service.target_l
         pct = min(1.0, cur / max(0.1, tgt))
 
-        p.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        p.setPen(QColor(255, 255, 255, 250))
-        p.drawText(QRectF(0, 48, bw, 28), Qt.AlignmentFlag.AlignCenter, f"{cur:.2f} / {tgt:.1f} Liter")
+        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 245))
+        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, f"{cur:.2f} / {tgt:.1f} Liter Air")
 
-        p.setFont(QFont("Segoe UI", 9))
-        p.setPen(QColor(160, 210, 230, 180))
-        p.drawText(QRectF(0, 74, bw, 18), Qt.AlignmentFlag.AlignCenter, f"Target Harian ({int(pct * 100)}% tercapai)")
+        p.setFont(QFont("Segoe UI", 10))
+        p.setPen(QColor(180, 180, 195, 190))
+        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, f"Target Harian ({int(pct * 100)}% tercapai)")
 
-        # Water progress bar
-        bar_w = bw - 80
-        bar_x = 40
-        bar_y = 105
+        # Progress bar
+        bar_w = bw - 52
+        bar_x = 26
+        bar_y = 86
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 35))
-        p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, 10), 5, 5)
-
+        p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, 8), 4, 4)
         p.setBrush(QColor("#00BCD4"))
-        p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w * pct, 10), 5, 5)
+        p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w * pct, 8), 4, 4)
 
         # Quick Buttons
-        btn_y = 150
+        cx = bw / 2
+        btn_y = 138
         p.setBrush(QColor(0, 188, 212, 220))
-        p.drawRoundedRect(QRectF(cx - 130, btn_y, 80, 32), 16, 16)
+        p.drawRoundedRect(QRectF(cx - 120, btn_y - 14, 72, 28), 14, 14)
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(QColor(255, 255, 255, 255))
-        p.drawText(QRectF(cx - 130, btn_y, 80, 32), Qt.AlignmentFlag.AlignCenter, "+250 ml")
+        p.drawText(QRectF(cx - 120, btn_y - 14, 72, 28), Qt.AlignmentFlag.AlignCenter, "+250 ml")
 
-        p.setBrush(QColor(0, 188, 212, 220))
-        p.drawRoundedRect(QRectF(cx - 40, btn_y, 80, 32), 16, 16)
-        p.drawText(QRectF(cx - 40, btn_y, 80, 32), Qt.AlignmentFlag.AlignCenter, "+500 ml")
+        p.drawRoundedRect(QRectF(cx - 36, btn_y - 14, 72, 28), 14, 14)
+        p.drawText(QRectF(cx - 36, btn_y - 14, 72, 28), Qt.AlignmentFlag.AlignCenter, "+500 ml")
 
         p.setBrush(QColor(255, 255, 255, 35))
-        p.drawRoundedRect(QRectF(cx + 50, btn_y, 80, 32), 16, 16)
-        p.drawText(QRectF(cx + 50, btn_y, 80, 32), Qt.AlignmentFlag.AlignCenter, "Reset")
+        p.drawRoundedRect(QRectF(cx + 48, btn_y - 14, 72, 28), 14, 14)
+        p.drawText(QRectF(cx + 48, btn_y - 14, 72, 28), Qt.AlignmentFlag.AlignCenter, "Reset")
 
     # ─────────────────── Paint: Expanded Control Center ──────────────────────
 
     def _paint_expanded_control_center(self, p: QPainter, bw: float, bh: float):
+        art_sz = 52.0
+        art_x = 22.0
+        art_y = 16.0
+        art_path = QPainterPath()
+        art_path.addRoundedRect(art_x, art_y, art_sz, art_sz, 12, 12)
+        p.fillPath(art_path, QColor("#9C27B0"))
+        p.setFont(QFont("Segoe UI Emoji", 20))
+        p.setPen(QColor(255, 255, 255, 255))
+        p.drawText(QRectF(art_x, art_y, art_sz, art_sz), Qt.AlignmentFlag.AlignCenter, "🎛️")
+
         vol = self.system_service.get_volume()
         bat = self.system_service.get_battery_info()
 
-        # Volume Section
-        p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        p.setPen(QColor(255, 255, 255, 240))
-        p.drawText(QRectF(26, 48, 120, 20), Qt.AlignmentFlag.AlignLeft, f"🔊 Volume: {vol}%")
+        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 245))
+        p.drawText(QRectF(88, 17, 240, 22), Qt.AlignmentFlag.AlignVCenter, f"Volume Master: {vol}%")
 
+        p.setFont(QFont("Segoe UI", 10))
+        p.setPen(QColor(180, 180, 195, 190))
+        bat_str = f"🔋 Baterai: {bat['percent']}%" if bat.get("has_battery") else "⚡ Daya: Desktop AC"
+        p.drawText(QRectF(88, 41, 240, 18), Qt.AlignmentFlag.AlignVCenter, bat_str)
+
+        # Volume slider
         bar_x = 26.0
         bar_w = bw - 52.0
-        bar_y = 78.0
+        bar_y = 86.0
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 35))
         p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, 8), 4, 4)
@@ -1080,50 +1131,15 @@ class NotchWindow(QWidget):
         fill_w = bar_w * (vol / 100.0)
         p.setBrush(QColor("#9C27B0"))
         p.drawRoundedRect(QRectF(bar_x, bar_y, fill_w, 8), 4, 4)
-
-        # Scrubber Knob
         p.setBrush(QColor(255, 255, 255, 255))
         p.drawEllipse(QPointF(bar_x + fill_w, bar_y + 4), 6, 6)
 
-        # Battery & System Info
-        p.setPen(QColor(255, 255, 255, 240))
-        bat_str = f"🔋 Baterai: {bat['percent']}% {'(Mengisi)' if bat['is_charging'] else ''}" if bat.get("has_battery") else "⚡ Daya: Desktop AC"
-        p.drawText(QRectF(26, 110, 250, 20), Qt.AlignmentFlag.AlignLeft, bat_str)
-
-        # Quick Actions
+        # Mute Action Button
         p.setBrush(QColor(255, 255, 255, 35))
-        p.drawRoundedRect(QRectF(26, 145, 100, 30), 15, 15)
-        p.drawText(QRectF(26, 145, 100, 30), Qt.AlignmentFlag.AlignCenter, "Mute Audio")
-
-    # ─────────────────── Paint: Expanded Notifications ───────────────────────
-
-    def _paint_expanded_notifications(self, p: QPainter, bw: float, bh: float):
-        notifs = self.notification_service.history[:3]
-        start_y = 44.0
-
-        p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        p.setPen(QColor(255, 255, 255, 240))
-        p.drawText(QRectF(24, start_y, 160, 20), Qt.AlignmentFlag.AlignLeft, "Recent Notifications")
-
-        # Clear All button
-        p.setFont(QFont("Segoe UI", 9))
-        p.setPen(QColor(255, 255, 255, 160))
-        p.drawText(QRectF(bw - 90, start_y, 70, 20), Qt.AlignmentFlag.AlignRight, "Clear All")
-
-        for i, n in enumerate(notifs):
-            ny = start_y + 26 + (i * 42.0)
-            card_rect = QRectF(24, ny, bw - 48, 36)
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(255, 255, 255, 20))
-            p.drawRoundedRect(card_rect, 8, 8)
-
-            p.setPen(QColor(255, 255, 255, 240))
-            p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-            p.drawText(QRectF(34, ny + 4, 150, 16), Qt.AlignmentFlag.AlignLeft, n.get("app_name"))
-
-            p.setPen(QColor(200, 200, 210, 180))
-            p.setFont(QFont("Segoe UI", 8))
-            p.drawText(QRectF(34, ny + 18, bw - 80, 14), Qt.AlignmentFlag.AlignLeft, f"{n.get('title')}: {n.get('message')}")
+        p.drawRoundedRect(QRectF(26, 126, 95, 28), 14, 14)
+        p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        p.setPen(QColor(255, 255, 255, 230))
+        p.drawText(QRectF(26, 126, 95, 28), Qt.AlignmentFlag.AlignCenter, "Mute Audio")
 
     # ─────────────────── Mouse & Hit Testing ─────────────────────────────────
 
@@ -1134,78 +1150,84 @@ class NotchWindow(QWidget):
         if not self._is_expanded:
             return "body"
 
-        # Expanded state targets:
-        # 1. Close '✕'
-        if QRectF(bw - 32, 10, 24, 24).contains(pos):
+        # 1. Close '✕' button
+        if QRectF(bw - 30, 14, 20, 20).contains(pos):
             return "close"
 
-        # 2. Module Switcher Tabs
-        tabs = [("media", 65), ("pomodoro", 65), ("tasks", 60), ("hydration", 60), ("control_center", 70)]
-        start_x = 20.0
-        for mod_id, tw in tabs:
-            if QRectF(start_x, 10, tw, 24).contains(pos):
-                return f"tab_{mod_id}"
-            start_x += tw + 6
+        # 2. Carousel Dots at bottom (click to jump to page)
+        if (bh - 24) <= pos.y() <= bh:
+            n = len(MODULE_LIST)
+            spacing = 15.0
+            start_x = (bw - ((n - 1) * spacing)) / 2.0
+            for i in range(n):
+                dx = start_x + (i * spacing)
+                if abs(pos.x() - dx) <= 10:
+                    return f"dot_{MODULE_LIST[i]}"
 
         # 3. Module Specific Hit Targets
         if self._active_module == "media":
             # Mic icon
-            if QRectF(bw - 85, 44, 20, 22).contains(pos):
+            if QRectF(bw - 110, 18, 22, 22).contains(pos):
                 return "mic"
             # Media buttons
             cx = bw / 2
-            btn_y = 168.0
+            btn_y = 138.0
             if math.hypot(pos.x() - cx, pos.y() - btn_y) <= 22:
                 return "play"
-            if math.hypot(pos.x() - (cx - 56), pos.y() - btn_y) <= 19:
+            if math.hypot(pos.x() - (cx - 54), pos.y() - btn_y) <= 19:
                 return "prev"
-            if math.hypot(pos.x() - (cx + 56), pos.y() - btn_y) <= 19:
+            if math.hypot(pos.x() - (cx + 54), pos.y() - btn_y) <= 19:
                 return "next"
+            # Chevrons < and > on sides
+            pad_x = 22.0
+            bar_y = 86.0
+            if QRectF(pad_x - 10, bar_y - 10, 24, 20).contains(pos):
+                return "chevron_left"
+            if QRectF(bw - pad_x - 14, bar_y - 10, 24, 20).contains(pos):
+                return "chevron_right"
             # Slider
-            pad_x = 24.0
-            slider_x = pad_x + 52
-            slider_w = bw - (pad_x * 2) - 104
-            if slider_x <= pos.x() <= slider_x + slider_w and 100 <= pos.y() <= 120:
+            slider_x = pad_x + 56
+            slider_w = bw - (pad_x * 2) - 112
+            if slider_x <= pos.x() <= slider_x + slider_w and 74 <= pos.y() <= 98:
                 return "slider"
 
         elif self._active_module == "pomodoro":
             cx = bw / 2
-            btn_y = 188.0
-            if QRectF(cx - 100, btn_y - 14, 45, 28).contains(pos):
+            btn_y = 142.0
+            if QRectF(cx - 85, btn_y - 14, 40, 28).contains(pos):
                 return "pomo_reset"
-            if QRectF(cx - 40, btn_y - 15, 80, 30).contains(pos):
+            if QRectF(cx - 38, btn_y - 15, 76, 30).contains(pos):
                 return "pomo_toggle"
-            if QRectF(cx + 55, btn_y - 14, 45, 28).contains(pos):
+            if QRectF(cx + 45, btn_y - 14, 40, 28).contains(pos):
                 return "pomo_skip"
 
         elif self._active_module == "tasks":
-            if QRectF(24, bh - 38, 95, 26).contains(pos):
+            if QRectF(24, 138, 90, 26).contains(pos):
                 return "task_add"
-            if QRectF(128, bh - 38, 100, 26).contains(pos):
+            if QRectF(122, 138, 90, 26).contains(pos):
                 return "task_clear"
-            # Checkbox toggles
-            start_y = 44.0
-            for i in range(4):
-                ty = start_y + (i * 32.0)
-                if QRectF(20, ty, 30, 24).contains(pos):
+            start_y = 74.0
+            for i in range(2):
+                ty = start_y + (i * 28.0)
+                if QRectF(20, ty, 28, 22).contains(pos):
                     return f"task_check_{i}"
 
         elif self._active_module == "hydration":
             cx = bw / 2
-            btn_y = 150
-            if QRectF(cx - 130, btn_y, 80, 32).contains(pos):
+            btn_y = 138.0
+            if QRectF(cx - 120, btn_y - 14, 72, 28).contains(pos):
                 return "hydra_250"
-            if QRectF(cx - 40, btn_y, 80, 32).contains(pos):
+            if QRectF(cx - 36, btn_y - 14, 72, 28).contains(pos):
                 return "hydra_500"
-            if QRectF(cx + 50, btn_y, 80, 32).contains(pos):
+            if QRectF(cx + 48, btn_y - 14, 72, 28).contains(pos):
                 return "hydra_reset"
 
         elif self._active_module == "control_center":
             bar_x = 26.0
             bar_w = bw - 52.0
-            if bar_x <= pos.x() <= bar_x + bar_w and 70 <= pos.y() <= 90:
+            if bar_x <= pos.x() <= bar_x + bar_w and 76 <= pos.y() <= 98:
                 return "vol_slider"
-            if QRectF(26, 145, 100, 30).contains(pos):
+            if QRectF(26, 126, 95, 28).contains(pos):
                 return "vol_mute"
 
         return "body"
@@ -1213,6 +1235,9 @@ class NotchWindow(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position()
+            self._swipe_start_pos = pos
+            self._swipe_start_global = event.globalPosition()
+            self._swipe_triggered = False
             target = self._hit_test(pos)
 
             if not self._is_expanded:
@@ -1223,9 +1248,17 @@ class NotchWindow(QWidget):
                 self.collapse()
                 return
 
-            if target.startswith("tab_"):
-                mod = target.replace("tab_", "")
+            if target.startswith("dot_"):
+                mod = target.replace("dot_", "")
                 self.set_active_module(mod)
+                return
+
+            # Chevrons page cycle
+            if target == "chevron_left":
+                self.prev_module()
+                return
+            elif target == "chevron_right":
+                self.next_module()
                 return
 
             # Media Actions
@@ -1252,9 +1285,9 @@ class NotchWindow(QWidget):
                 self.update()
                 return
             elif target == "slider":
-                pad_x = 24.0
-                slider_x = pad_x + 52
-                slider_w = float(self.width()) - (pad_x * 2) - 104
+                pad_x = 22.0
+                slider_x = pad_x + 56
+                slider_w = float(self.width()) - (pad_x * 2) - 112
                 click_ratio = max(0.0, min(1.0, (pos.x() - slider_x) / slider_w))
                 self._pos_ms = int(click_ratio * self._dur_ms)
                 try:
@@ -1280,7 +1313,7 @@ class NotchWindow(QWidget):
 
             # Task Actions
             elif target == "task_add":
-                text, ok = QInputDialog.getText(self, "Add New Task", "Task description:")
+                text, ok = QInputDialog.getText(self, "Add New Task", "Deskripsi task:")
                 if ok and text:
                     self.task_service.add_task(text)
                 return
@@ -1341,11 +1374,40 @@ class NotchWindow(QWidget):
                 self.setCursor(Qt.CursorShape.ArrowCursor)
             self.update()
 
+        # Swipe / Drag Detection using global coordinates
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, "_swipe_start_global") and self._swipe_start_global is not None:
+            dx = event.globalPosition().x() - self._swipe_start_global.x()
+            dy = event.globalPosition().y() - self._swipe_start_global.y()
+            if abs(dx) > 35 and abs(dx) > abs(dy) * 1.2 and not self._swipe_triggered:
+                self._swipe_triggered = True
+                if dx < 0:
+                    self.next_module()
+                else:
+                    self.prev_module()
+                return
+
         if event.buttons() == Qt.MouseButton.LeftButton and not self._drag_pos.isNull() and self._hover_target == "body":
-            if self._layout_mode == "floating":
-                self.move(event.globalPosition().toPoint() - self._drag_pos)
+            if self._layout_mode == "floating" and not self._swipe_triggered:
+                if not self._is_expanded or (event.modifiers() & Qt.KeyboardModifier.AltModifier):
+                    self.move(event.globalPosition().toPoint() - self._drag_pos)
 
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = QPoint()
+        self._swipe_start_pos = None
+        self._swipe_start_global = None
+        self._swipe_triggered = False
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        """Scroll wheel over island switches between modules smoothly."""
+        delta = event.angleDelta().y() or event.angleDelta().x()
+        if delta < 0:
+            self.next_module()
+        elif delta > 0:
+            self.prev_module()
+        event.accept()
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1372,7 +1434,6 @@ class NotchWindow(QWidget):
     def _show_context_menu(self, global_pos: QPoint):
         menu = RoundMenu(parent=self)
 
-        # Header: Active Module
         mod_lbl = Action(f"🏝️ Notch v2.0 ({self._active_module.capitalize()})")
         mod_lbl.setEnabled(False)
         menu.addAction(mod_lbl)
